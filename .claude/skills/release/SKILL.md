@@ -33,7 +33,7 @@ Update all of these to the new version string; they must agree:
 
 | File | What |
 |---|---|
-| `backend/app/__init__.py` | `__version__` (used by the API title and `/api/status`) |
+| `backend/app/__init__.py` | `__version__` (used by the API title, `/api/status`, and `desktop/version.py` for the installer) |
 | `frontend/package.json`, `frontend/package-lock.json` (root entry) | `"version"` |
 | `desktop/launcher.py` | `APP_VERSION` (logged at startup; the launcher test checks it against the API) |
 | `desktop/marine_doc_intelligence.spec` | `CFBundleShortVersionString` |

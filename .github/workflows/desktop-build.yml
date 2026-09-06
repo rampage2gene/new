@@ -114,7 +114,7 @@ jobs:
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
-          $version = python -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('backend/app/__init__.py').read_text()).group(1))"
+          $version = python desktop/version.py
           & $iscc "/DAppVersion=$version" desktop\windows\installer.iss
           Move-Item dist\MarineDocIntelligence-Setup.exe "${{ matrix.artifact }}-Setup.exe"
 
