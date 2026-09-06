@@ -12,6 +12,8 @@ Every answer, extracted value and calculator input keeps its source: document,
 page, section, the exact text, and a bounding box that is highlighted in the
 viewer. Nothing is presented as a manufacturer fact without a source.
 
+**Desktop app:** [desktop/README.md](desktop/README.md) — a double-click application with its own icon for Windows, macOS and Linux, built by CI.
+
 **Specification:** [docs/SPEC.md](docs/SPEC.md) (requirements, pipeline and rule contracts, roadmap), [docs/API.md](docs/API.md) (endpoint contracts), [docs/DATA_MODEL.md](docs/DATA_MODEL.md) (storage and JSON shapes).
 
 ## What it does
@@ -121,6 +123,13 @@ uvicorn app.main:app --port 8000
 For development with hot reload run `scripts/dev.sh` (API on 8000, Vite on 5173).
 Generate demo documents with `python scripts/make_samples.py samples/` and upload them
 in the library.
+
+### Desktop application
+
+`python desktop/build.py` packages the backend and UI into a native windowed app
+with the project icon (see [desktop/README.md](desktop/README.md)). The
+"Desktop builds" GitHub Actions workflow produces the Windows, macOS and Linux
+packages on every push; download them from the Actions tab.
 
 ### Docker
 

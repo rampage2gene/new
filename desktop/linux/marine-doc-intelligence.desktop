@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Marine Electrical Document Intelligence
+Comment=OCR, search and AI Q&A for marine electrical documentation
+Exec=__INSTALL_DIR__/MarineDocIntelligence
+Icon=__INSTALL_DIR__/icon.png
+Terminal=false
+Categories=Office;Engineering;
+StartupWMClass=MarineDocIntelligence

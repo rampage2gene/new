@@ -27,3 +27,7 @@ frontend/dist/
 
 # TypeScript build cache
 frontend/tsconfig.tsbuildinfo
+
+# Desktop builds
+build/
+dist/

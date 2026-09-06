@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e2c54"/><stop offset="1" stop-color="#071934"/>
+    </linearGradient>
+    <clipPath id="clip"><rect width="1024" height="1024" rx="225"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <path d="M0 800 Q128 760 256 800 T512 800 T768 800 T1024 800 V1024 H0 Z" fill="#56b0e8"/>
+    <path d="M0 860 Q128 830 256 860 T512 860 T768 860 T1024 860 V1024 H0 Z" fill="#207ac4"/>
+  </g>
+  <polygon points="306,204 636,204 746,314 746,754 306,754" fill="#000" opacity="0.27"/>
+  <polygon points="292,190 622,190 732,300 732,740 292,740" fill="#f7f9fc"/>
+  <polygon points="622,190 622,300 732,300" fill="#cbd6e4"/>
+  <g fill="#96a8be">
+    <rect x="352" y="360" width="236" height="18" rx="9"/>
+    <rect x="352" y="422" width="182" height="18" rx="9"/>
+    <rect x="352" y="484" width="266" height="18" rx="9"/>
+    <rect x="352" y="546" width="152" height="18" rx="9"/>
+  </g>
+  <polygon points="562,282 412,552 512,552 462,782 642,492 537,492" fill="#000" opacity="0.24"/>
+  <polygon points="552,270 402,540 502,540 452,770 632,480 527,480" fill="#ffc428" stroke="#de9a0c" stroke-width="8" stroke-linejoin="round"/>
+</svg>

@@ -193,6 +193,16 @@ Status: **I** implemented, **P** partial, **R** roadmap. "Test" names the pytest
 | UI-6 | Search page, Calculators page (document prefill and suggestions), Compare page, Invoices page. | I | walkthrough |
 | UI-7 | Deep links `/documents/{id}?page=N&bbox=x0,y0,x1,y1` open a page with a highlight. | I | walkthrough (search → viewer) |
 
+### 4.13 Desktop packaging (DESK)
+
+| ID | Requirement | Status | Test / evidence |
+|---|---|---|---|
+| DESK-1 | The application runs as a double-click desktop program with the project icon: `desktop/launcher.py` starts the API on a free localhost port, waits for `/api/status`, and opens the UI in a native web view (pywebview); closing the window stops the server. Without a native web view it falls back to the default browser. | I | frozen-build smoke run (§16.4) |
+| DESK-2 | User data (originals, renders, `index.db`, `settings.env`) lives in the per-user application directory, never in the install folder; `settings.env` supplies `MDI_*` settings to the packaged app. | I | §16.4 |
+| DESK-3 | Tesseract is discovered from `MDI_TESSERACT_CMD`, a `tesseract/` folder beside the executable, standard install paths, then `PATH`; Windows builds bundle it. | I | §16.4 |
+| DESK-4 | `desktop/build.py` produces a PyInstaller bundle (`dist/MarineDocIntelligence/` or the macOS `.app`); the "Desktop builds" workflow builds Windows, macOS (x64, arm64) and Linux artifacts on every push and attaches them to a Release on `v*` tags. | I | `.github/workflows/desktop-build.yml` |
+| DESK-5 | Icon set generated procedurally by `desktop/make_icon.py` (PNG 16–1024, `.ico`, `.icns`, `.svg`). | I | files in `desktop/icons/` |
+
 ## 5. System architecture
 
 ### 5.1 Layers
@@ -598,6 +608,10 @@ Run: `cd backend && python -m pytest -q` (34 tests, ~7 s; requires Tesseract). T
 
 With the app running and the sample documents uploaded, a Playwright script (kept outside the repo during development) verifies: library rows; opening a document; asking the suggested fuse question and receiving an answer that moves the viewer to page 3 with a highlight; clicking a citation; Technical Data groups; jumping to the fuse row (word-level highlight on `300 A`); Send-to-calculator → fuse calculator prefilled with `300` and a source; suggestions for continuous current and conductor; result classifications; Verification, Structure and Diagram tabs on the scanned copy; search deep link; comparison table; invoice card; zero browser console errors. Adding this script as `frontend/e2e/` is a roadmap item (§18, Phase 2).
 
+### 16.4 Desktop build smoke run
+
+`python desktop/build.py --skip-frontend` on Linux, then run `dist/MarineDocIntelligence/MarineDocIntelligence` with `MDI_DATA_DIR` set to a scratch directory and `MDI_PORT=8767`: `/api/status` reports `tesseract`, `/` serves the UI, uploading the scanned and text sample manuals reaches `ready` (4 OCR pages / 26 entities and 0 OCR pages / 36 entities), page images return 200, and `/api/ask` returns an extractive answer. Repeat on Windows and macOS from the CI artifacts before a release.
+
 ## 17. Known gaps and limitations
 
 | Area | Gap |
@@ -612,6 +626,7 @@ With the app running and the sample documents uploaded, a Playwright script (kep
 | Calculators | Ampacity and resistance tables are typical published values, not a standards implementation; no temperature correction in voltage drop; standard fuse series is generic. |
 | Platform | SQLite single-node; FTS5 query is SQLite-specific so `MDI_DATABASE_URL` pointing elsewhere would need an FTS replacement; no authentication or multi-tenancy; CORS is `*`. |
 | UI | No PDF text layer (renders are images); no annotation persistence; e2e script not in repo. |
+| Desktop | Builds are unsigned (SmartScreen/Gatekeeper warn on first launch); macOS and Linux builds need Tesseract installed separately; no auto-update; the API listens on localhost without authentication, so any local process can reach it while the app is open. |
 
 ## 18. Roadmap
 
@@ -656,6 +671,7 @@ All items **Planned**. IDs continue the numbering of §4.
 | COP-3 | Wiring diagram generation from the system model (single-line first). |
 | COP-4 | Projects/workspaces, authentication and roles; Postgres option with pgvector for embeddings. |
 | COP-5 | Guided installation planning (inverter, battery bank, charging) that produces a cited, verifiable checklist. |
+| COP-6 | Signed desktop builds (Authenticode, Apple notarization), an installer (MSI/DMG) and in-app update checks; bundle Tesseract on macOS/Linux. |
 
 ## 19. Change control
 
