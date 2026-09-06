@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.1.0 - 2026-09-06
+
+First release, built from the PR #1 branch. Desktop installers for Windows, macOS and Linux.
 
 - Excel workbooks with live formulas (`/api/export/workbook`, `/api/calculators/{id}/export`):
   technical data with page hyperlinks, detected tables, one sheet per calculator with
