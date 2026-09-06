@@ -48,7 +48,9 @@ export default function LibraryPage() {
           <p>Upload manuals, datasheets, wiring diagrams, scans, photos, invoices and parts lists. Each file is read, OCR'd if needed, structured, indexed and checked.</p>
         </div>
         <div className="row">
-          <a className="btn" href={api.exportEntitiesUrl("xlsx")}>Export all technical data (.xlsx)</a>
+          <a className="btn" href={api.exportWorkbookUrl()} title="One Excel file: every extracted value with a link to its page, detected tables, calculator sheets prefilled from the documents with live formulas, and invoice totals">Export workbook (.xlsx, formulas)</a>
+          <a className="btn" href={api.exportEntitiesUrl("xlsx")}>Values only (.xlsx)</a>
+          <Link className="btn" to="/convert">Convert files</Link>
           <button className="btn primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "Uploading…" : "Upload documents"}</button>
           <input ref={fileRef} type="file" multiple accept=".pdf,image/*" style={{ display: "none" }} onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>

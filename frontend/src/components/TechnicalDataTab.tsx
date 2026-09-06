@@ -27,6 +27,7 @@ export default function TechnicalDataTab({ doc, jump }: { doc: DocumentDetail; j
       <div className="row" style={{ marginBottom: 10 }}>
         <input type="text" placeholder="Filter values, applications, sections…" value={filter} onChange={(e) => setFilter(e.target.value)} />
         <a className="btn sm" href={api.exportEntitiesUrl("csv", [doc.id])}>CSV</a>
+        <a className="btn sm" href={api.exportWorkbookUrl([doc.id])} title="Excel workbook: values with page links, tables, and calculator sheets with live formulas">Workbook</a>
       </div>
       <p className="small muted">Electrical Specification Extraction: every value below was read from this document and keeps its page, section and location. Confidence combines pattern certainty with OCR word confidence; dots mark verification flags.</p>
       {spec.groups.map((g) => {

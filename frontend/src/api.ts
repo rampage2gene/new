@@ -47,7 +47,80 @@ export const api = {
   invoices: () => request<Invoice[]>("/api/invoices"),
   exportEntitiesUrl: (format: string, documentIds?: string[]) => `/api/export/entities?format=${format}${(documentIds || []).map((d) => `&document_ids=${d}`).join("")}`,
   exportInvoicesUrl: (format: string, report: string) => `/api/export/invoices?format=${format}&report=${report}`,
+  // Excel workbook with live formulas (technical data, tables, calculators, invoices)
+  exportWorkbookUrl: (documentIds?: string[], include?: string[]) =>
+    `/api/export/workbook?${(documentIds || []).map((d) => `document_ids=${d}&`).join("")}${include?.length ? `include=${include.join(",")}` : ""}`,
+  exportCalculator: (id: string, inputs: Record<string, unknown>) => downloadBlob(`/api/calculators/${id}/export`, json({ inputs }), `${id}.xlsx`),
+  // PDF outputs and document conversions
+  searchablePdfUrl: (id: string) => `/api/documents/${id}/export/searchable-pdf`,
+  reportPdfUrl: (id: string, sections = "spec_extraction,qc") => `/api/documents/${id}/export/report.pdf?sections=${sections}`,
+  documentExportUrl: (id: string, fmt: "txt" | "md" | "json") => `/api/documents/${id}/export/${fmt}`,
+  exportReport: (body: { document_ids?: string[]; sections?: string[]; calculations?: CalcResult[]; answer?: Answer & { question?: string }; title?: string }) =>
+    downloadBlob("/api/export/report.pdf", json(body), "report.pdf"),
+  convert: (files: File[], to: string, opts?: { ocr?: boolean; dpi?: number }) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f));
+    fd.append("to", to);
+    if (opts?.ocr === false) fd.append("ocr", "false");
+    if (opts?.dpi) fd.append("dpi", String(opts.dpi));
+    return downloadBlob("/api/convert", { method: "POST", body: fd });
+  },
+  merge: (files: File[]) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f));
+    return downloadBlob("/api/convert/merge", { method: "POST", body: fd }, "merged.pdf");
+  },
+  split: (file: File, ranges?: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (ranges) fd.append("ranges", ranges);
+    return downloadBlob("/api/convert/split", { method: "POST", body: fd });
+  },
 };
+
+/** POST (or GET) a generated file and hand it to the browser as a download. */
+export async function downloadBlob(url: string, init?: RequestInit, fallbackName?: string): Promise<string> {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `Request failed (${res.status})`);
+  }
+  const cd = res.headers.get("content-disposition") || "";
+  const m = /filename="?([^";]+)"?/.exec(cd);
+  const name = (m && m[1]) || fallbackName || "download";
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
+  return name;
+}
+
+export const REPORT_KEY = "mdi.report.calculations";
+
+export function readReportCalcs(): CalcResult[] {
+  try {
+    const raw = sessionStorage.getItem(REPORT_KEY);
+    return raw ? (JSON.parse(raw) as CalcResult[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeReportCalcs(list: CalcResult[]) {
+  if (list.length) sessionStorage.setItem(REPORT_KEY, JSON.stringify(list));
+  else sessionStorage.removeItem(REPORT_KEY);
+}
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;

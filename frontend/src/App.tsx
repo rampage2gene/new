@@ -8,6 +8,7 @@ import SearchPage from "./pages/SearchPage";
 import CalculatorsPage from "./pages/CalculatorsPage";
 import ComparePage from "./pages/ComparePage";
 import InvoicesPage from "./pages/InvoicesPage";
+import ConvertPage from "./pages/ConvertPage";
 
 const NAV = [
   { to: "/library", label: "Document Library", icon: "▤" },
@@ -15,6 +16,7 @@ const NAV = [
   { to: "/calculators", label: "Calculators", icon: "∑" },
   { to: "/compare", label: "Compare Documents", icon: "⇄" },
   { to: "/invoices", label: "Invoices & Parts", icon: "¤" },
+  { to: "/convert", label: "Convert & Export", icon: "⇩" },
 ];
 
 export default function App() {
@@ -62,6 +64,7 @@ export default function App() {
           <Route path="/calculators/:calcId" element={<CalculatorsPage />} />
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/convert" element={<ConvertPage />} />
         </Routes>
       </main>
     </div>

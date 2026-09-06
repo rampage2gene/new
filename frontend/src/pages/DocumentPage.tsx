@@ -7,6 +7,7 @@ import TechnicalDataTab from "../components/TechnicalDataTab";
 import StructureTab from "../components/StructureTab";
 import QCTab from "../components/QCTab";
 import DiagramTab from "../components/DiagramTab";
+import ExportMenu from "../components/ExportMenu";
 import type { BBox, DocumentDetail, Highlight } from "../types";
 
 export type Jump = (page: number, bbox?: BBox | null, kind?: Highlight["kind"], label?: string) => void;
@@ -59,8 +60,7 @@ export default function DocumentPage() {
           {[doc.manufacturer, doc.document_type, doc.model_number && `model ${doc.model_number}`, doc.revision && `rev ${doc.revision}`, doc.publication_date].filter(Boolean).join(" · ")}
         </span>
         <span className="grow" />
-        <a className="btn sm" href={api.exportEntitiesUrl("xlsx", [doc.id])}>Export data (.xlsx)</a>
-        <a className="btn sm" href={api.exportEntitiesUrl("json", [doc.id])}>JSON</a>
+        <ExportMenu doc={doc} />
       </div>
       <div className="viewer">
         <div className="viewer-left">

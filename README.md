@@ -33,6 +33,9 @@ viewer. Nothing is presented as a manufacturer fact without a source.
 | Multi-document comparison table and rule-based conflict detection (voltage mismatch, BMS discharge limit vs inverter current, charger vs battery charge limits, conflicting fuse recommendations) | Compare Documents |
 | Calculators fed from document values: DC current, inverter DC current, voltage drop, battery runtime, alternator charging, AC load, and a device-aware fuse & circuit-protection analysis that separates *manufacturer-required* from *calculated estimate* and *recommended pending verification* | Calculators |
 | Invoice/receipt extraction (vendor, number, date, line items, tax, total) with line-item, project-estimate and job-costing exports | Invoices & Parts |
+| Excel workbooks with **live formulas**: extracted values with page links, detected tables, every calculator as a sheet (inputs are cells, results are formulas, prefilled from your documents), invoice totals | Library / Export menu / "Open in Excel" |
+| PDF outputs: searchable copies of scanned PDFs and photos (invisible OCR text layer), report PDFs with specifications, verification flags, calculations and cited answers | Export menu / Calculators |
+| Conversions without ingesting: images → PDF, PDF → text / Markdown / JSON / page images (OCR included), merge, split | Convert & Export |
 
 ## Architecture
 
@@ -154,6 +157,9 @@ docker run -p 8000:8000 -v mdi-data:/data -e MDI_ANTHROPIC_API_KEY=sk-ant-... ma
 | `POST /api/documents/{id}/pages/{n}/diagram` | Diagram analysis with confidence tiers |
 | `GET /api/calculators`, `POST /api/calculators/{id}/run`, `GET /api/calculators/{id}/suggest` | Calculator specs, execution, document-to-calculator suggestions |
 | `GET /api/invoices`, `GET /api/export/invoices`, `GET /api/export/entities` | Invoice data and CSV/XLSX/JSON exports |
+| `GET /api/export/workbook`, `POST /api/calculators/{id}/export` | Excel workbooks with live formulas |
+| `GET /api/documents/{id}/export/{searchable-pdf\|report.pdf\|txt\|md\|json}`, `POST /api/export/report.pdf` | PDF outputs and text exports |
+| `POST /api/convert`, `POST /api/convert/merge`, `POST /api/convert/split` | Stateless file conversions |
 
 Interactive docs: `http://localhost:8000/docs`.
 

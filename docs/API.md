@@ -220,6 +220,7 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | `GET /calculators` | — | `[CalculatorSpec]` |
 | `POST /calculators/{calc_id}/run` | `{"inputs": {key: value \| {"value", "unit", "source": SourceRef}}}` | `CalcResult`; 422 with the validation message (missing required input, non-numeric, unknown conductor size, unknown calculator) |
 | `GET /calculators/{calc_id}/suggest` | `document_id` | `{"calculator": id, "document": {id, name}, "suggestions": {input_key: [Entity ≤6]}}` (only inputs with `entity_types`) |
+| `POST /calculators/{calc_id}/export` | same body as `run` | attachment `<calc_id>.xlsx`: the calculator as a sheet whose inputs are editable cells and whose results are Excel formulas (plus a `Reference` sheet of lookup tables); 422 when the app cannot run the calculation with the given inputs |
 
 ### Invoices and exports
 
@@ -229,6 +230,29 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | `GET /documents/{id}/invoice` | — | `Invoice` (404 when the document is not an invoice) |
 | `GET /export/entities` | `format=csv\|xlsx\|json`, `document_ids[]`, `entity_type[]` | attachment `technical-data.<ext>`; columns `document_name, entity_type, value_text, value, unit, qualifier, application, circuit, equipment, equipment_model, device_type, page, section, confidence, ocr_confidence, snippet, flags` |
 | `GET /export/invoices` | `format`, `document_ids[]`, `report=lines\|estimate\|costing` | attachment `invoice-lines` (`vendor, invoice_number, invoice_date, currency, description, quantity, unit, unit_price, total, page, document_name`), `project-estimate` (`description, quantity, unit, unit_price, total, vendors` + `PROJECT TOTAL` row) or `job-costing` (`vendor, invoice_number, invoice_date, currency, line_items, subtotal, tax, total, document_name` + `TOTAL` row) |
+
+### Workbook export (live formulas)
+
+| Method & path | Request | Response |
+|---|---|---|
+| `GET /export/workbook` | `document_ids[]` (default: all ready documents), `include=data,tables,calculators,invoices`, `calculators[]` (calculator ids, default all) | attachment `marine-electrical-workbook.xlsx`. Sheets: `README` (documents, legend, disclaimer); `Technical Data` (Excel table, numeric `Value` column, `Source` column of `HYPERLINK` formulas to `<base>/documents/{id}?page=N&bbox=…`); `Tables` (detected tables, numeric strings as numbers); `Reference` (AWG/mm² ampacity and resistance, standard fuse and breaker sizes, device load factors; named ranges `AwgTable`, `Mm2Table`, `FuseSizes`, `DeviceTable`); one sheet per calculator with inputs prefilled from the first document that has suggestions, results as formulas (see SPEC §12.6) and an "As computed by app" column; `Invoices` (line totals `=qty*price`, per-invoice `SUMIF`, job total, estimate-by-item `SUMIF`) |
+
+### PDF outputs and document exports
+
+| Method & path | Request | Response |
+|---|---|---|
+| `GET /documents/{id}/export/searchable-pdf` | — | attachment `<name>_searchable.pdf`: the original file with an invisible text layer (each OCR word at its bbox) on OCR'd pages; images are wrapped in a one-page PDF first. 409 while the document is not `ready`, 404 if the original is missing |
+| `GET /documents/{id}/export/report.pdf` | `sections=spec_extraction,qc` | attachment `<name>_report.pdf` (A4, footer with generation time and page numbers) |
+| `POST /export/report.pdf` | `{"document_ids": [], "sections": ["spec_extraction","qc"], "calculations": [CalcResult…], "answer": Answer & {"question"}, "title"}` | attachment `report.pdf` combining the chosen sections per document, calculator results (inputs with sources, formula, steps, classification badges, warnings, assumptions) and a cited answer; 422 when nothing was requested |
+| `GET /documents/{id}/export/{txt\|md\|json}` | `words=false` (json: include OCR word boxes) | attachment: page-separated text; Markdown with headings (`#` × level), pipe tables, `> **WARNING**` quotes; or `DocumentDetail` + `pages[].blocks[]`. Unknown format → 404 |
+
+### Conversions (stateless, nothing stored)
+
+| Method & path | Request | Response |
+|---|---|---|
+| `POST /convert` | multipart `files[]`, `to=pdf\|txt\|md\|json\|png`, `ocr=true`, `dpi` | `pdf`: all files (images and PDFs) as one PDF, one page per image; other targets take exactly one PDF (an image is wrapped first): text/Markdown/JSON as above but read on the fly with OCR for pages lacking a text layer (`ocr=false` skips OCR), `png`: zip of `page-NNNN.png` at `dpi` (default `MDI_RENDER_DPI`). 415 for unreadable files, 422 for a wrong file count |
+| `POST /convert/merge` | multipart `files[]` (≥2 PDFs/images) | attachment `merged.pdf` in upload order |
+| `POST /convert/split` | multipart `file`, `ranges` e.g. `1-3,5,7-` (default one file per page) | attachment `<name>_split.zip` of `<name>_p<range>.pdf`; 422 for an empty or malformed range |
 
 ### Static UI
 

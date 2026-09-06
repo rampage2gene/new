@@ -193,13 +193,25 @@ Status: **I** implemented, **P** partial, **R** roadmap. "Test" names the pytest
 | UI-6 | Search page, Calculators page (document prefill and suggestions), Compare page, Invoices page. | I | walkthrough |
 | UI-7 | Deep links `/documents/{id}?page=N&bbox=x0,y0,x1,y1` open a page with a highlight. | I | walkthrough (search → viewer) |
 
-### 4.13 Desktop packaging (DESK)
+### 4.13 Exports, reports and conversion (EXP)
 
 | ID | Requirement | Status | Test / evidence |
 |---|---|---|---|
-| DESK-1 | The application runs as a double-click desktop program with the project icon: `desktop/launcher.py` starts the API on a free localhost port, waits for `/api/status`, and opens the UI in a native web view (pywebview); closing the window stops the server. Without a native web view it falls back to the default browser. | I | frozen-build smoke run (§16.4) |
-| DESK-2 | User data (originals, renders, `index.db`, `settings.env`) lives in the per-user application directory, never in the install folder; `settings.env` supplies `MDI_*` settings to the packaged app. | I | §16.4 |
-| DESK-3 | Tesseract is discovered from `MDI_TESSERACT_CMD`, a `tesseract/` folder beside the executable, standard install paths, then `PATH`; Windows builds bundle it. | I | §16.4 |
+| EXP-1 | Workbook export: one `.xlsx` with every extracted value as a numeric cell plus a hyperlink to its page, detected tables as cells, and invoice lines whose totals, per-invoice and job totals and estimate-by-item rows are `SUM`/`SUMIF` formulas. | I | `test_workbook_has_all_sheets_and_links`, `test_invoice_sheet_formulas` |
+| EXP-2 | Every calculator is exportable as a sheet whose inputs are editable cells and whose results are Excel formulas over those cells and a `Reference` sheet of lookup tables, so changing an input recalculates in Excel/LibreOffice/Sheets. The app's own result is written alongside for comparison. Sheets in the workbook are prefilled from the documents' suggestions. | I | `test_calculator_sheets_are_live_formulas`, `test_single_calculator_export_and_error`; §16.4 recalculation check |
+| EXP-3 | Searchable PDF: the original file with an invisible text layer placed word-by-word from the OCR word boxes, for PDFs and image uploads. | I | `test_searchable_pdf_adds_text_layer`, `test_searchable_pdf_for_photo` |
+| EXP-4 | Report PDF: specification extraction grouped as in the Technical Data tab, verification flags, calculator results with classification badges and sources, and a cited answer, for one or several documents, with footer and disclaimer. | I | `test_report_pdf_for_document`, `test_combined_report_with_calculation_and_answer` |
+| EXP-5 | Processed documents export as text, Markdown (headings, pipe tables, warning quotes) and JSON (pages, blocks, structure). | I | `test_document_text_markdown_json` |
+| EXP-6 | Stateless conversion of uploaded files: images/PDFs → PDF, PDF → text/Markdown/JSON (OCR for pages without a text layer) / page PNGs, merge, split by page ranges. Nothing is stored. | I | `test_convert_pdf_to_markdown_and_images`, `test_convert_image_to_pdf_merge_and_split` |
+| EXP-7 | UI: Export menu on the document page (spreadsheets, PDF, text), workbook button in the library and Technical Data tab, "Open in Excel" and "Add to report → Download report" on calculators, a Convert & Export page. | I | Playwright smoke (§16.3) |
+
+### 4.14 Desktop packaging (DESK)
+
+| ID | Requirement | Status | Test / evidence |
+|---|---|---|---|
+| DESK-1 | The application runs as a double-click desktop program with the project icon: `desktop/launcher.py` starts the API on a free localhost port, waits for `/api/status`, and opens the UI in a native web view (pywebview); closing the window stops the server. Without a native web view it falls back to the default browser. | I | frozen-build smoke run (§16.5) |
+| DESK-2 | User data (originals, renders, `index.db`, `settings.env`) lives in the per-user application directory, never in the install folder; `settings.env` supplies `MDI_*` settings to the packaged app. | I | §16.5 |
+| DESK-3 | Tesseract is discovered from `MDI_TESSERACT_CMD`, a `tesseract/` folder beside the executable, standard install paths, then `PATH`; Windows builds bundle it. | I | §16.5 |
 | DESK-4 | `desktop/build.py` produces a PyInstaller bundle (`dist/MarineDocIntelligence/` or the macOS `.app`); the "Desktop builds" workflow builds Windows, macOS (x64, arm64) and Linux artifacts on every push (Windows also as an Inno Setup per-user installer with Start menu entry and uninstaller) and attaches them to a Release on `v*` tags. | I | `.github/workflows/desktop-build.yml` |
 | DESK-5 | Icon set generated procedurally by `desktop/make_icon.py` (PNG 16–1024, `.ico`, `.icns`, `.svg`). | I | files in `desktop/icons/` |
 
@@ -544,6 +556,19 @@ Document roles come from `equipment_types` and titles; any non-battery document 
 - Triggered when `document_type` is Invoice or Receipt. Fields: vendor (largest-font non-"invoice" block on page 1), invoice_number (first `Invoice/Receipt/Order/Ref No: X` containing a digit), invoice_date, currency (word or symbol), subtotal, tax, total (preferring "grand total / amount due / balance due" labels), line items from patterns `desc qty[unit] unit_price total`, `qty desc unit_price total`, `desc total`; a line whose qty × unit price equals the total gets confidence 0.95.
 - Exports (`api/exports.py`): entities (17 columns incl. flags) and invoices (`lines` 11 columns, `estimate` aggregated by description with a PROJECT TOTAL row, `costing` per invoice with a TOTAL row) as CSV, XLSX (openpyxl) or JSON.
 
+### 13.1 Workbook with live formulas (`exports/workbook.py`)
+
+- Each `CalculatorSpec` carries an ordered `excel` list of rows `{key, label, unit, kind: helper|result|text, classification, formula}`. `formula` is an Excel template; the builder expands placeholders to cell references: `{key}` → `N($B$n)` for number inputs (blank or text counts as 0, so optional inputs can be tested with `>0`), `{raw:key}` → the cell, `{pct:key}` → `IF(N(c)>1,N(c)/100,N(c))` (accepts 90 or 0.9), `{h:name}` → an earlier helper row, `{r:key}` → an earlier result row. Rows are written in list order in one "Calculation" block so every reference points upward.
+- Lookups use named ranges on the `Reference` sheet written from `calculators/tables.py` and `DEVICE_PROFILES`: `AwgTable` (AWG, Ω/kft, ampacity, mm²), `Mm2Table`, `FuseSizes`, `DeviceTable` (key, k, label, characteristic). Next-standard-size-up is `INDEX(FuseSizes, IFERROR(MATCH(x-1e-6, FuseSizes, 1)+1, 1))`; conductor keys are normalised in-sheet with `SUBSTITUTE/UPPER/TRIM` so "4/0 AWG", "#4/0" and "4/0" all resolve.
+- Deliberate simplifications versus the Python modules (documented on the sheet): `battery_main` ampacity clamp and mm² ampacity interpolation are not reproduced; the app value column shows any difference.
+- Inputs: green fill, blue font when sourced from a document, `Source` column `HYPERLINK` to the page/bbox deep link; results amber; helpers grey. The app's `CalcResult` values go in column E; when the app cannot run the calculation (missing inputs) the sheet is still written with the error noted and the formulas return blanks until the green cells are filled.
+
+### 13.2 PDF outputs and conversions (`exports/pdf.py`, `exports/convert.py`)
+
+- Searchable PDF: for every page with `text_source = ocr`, each stored word (`blocks.words`) is inserted with `render_mode=3` (invisible) in Helvetica at a size fitted to the word's box width (capped at 1.1 × box height) with the baseline at `y1 − 0.22·size`; boxes are scaled by page-size ratio when the stored page units differ from the PDF's. Image uploads are first wrapped in a one-page PDF sized to the stored page (pixel units become points). Embedded-text pages are untouched.
+- Report PDF: HTML built from the same queries the API uses (spec-extraction GROUPS, QC flags, `CalcResult` dicts, `Answer` dicts with a Markdown-subset renderer for headings, bullets, pipe tables and bold) is laid out with `pymupdf.Story` on A4 with 40 pt margins; a footer with generation time and "page i of n" is stamped afterwards.
+- Conversions read PDFs with the pipeline's own reader (`read_pdf_bytes`: embedded text, `_attach_tables`, `_ocr_page` when the page fails the text-quality gate) and classifier (`analyse_layout`), so Markdown/JSON from the Convert page match what ingestion would produce, minus persistence. Page ranges accept `a-b`, `a`, `a-`, `-b`; out-of-range or empty ranges are 422.
+
 ## 14. User interface (`frontend/src`)
 
 | Screen | Route | Key behaviour |
@@ -608,7 +633,11 @@ Run: `cd backend && python -m pytest -q` (34 tests, ~7 s; requires Tesseract). T
 
 With the app running and the sample documents uploaded, a Playwright script (kept outside the repo during development) verifies: library rows; opening a document; asking the suggested fuse question and receiving an answer that moves the viewer to page 3 with a highlight; clicking a citation; Technical Data groups; jumping to the fuse row (word-level highlight on `300 A`); Send-to-calculator → fuse calculator prefilled with `300` and a source; suggestions for continuous current and conductor; result classifications; Verification, Structure and Diagram tabs on the scanned copy; search deep link; comparison table; invoice card; zero browser console errors. Adding this script as `frontend/e2e/` is a roadmap item (§18, Phase 2).
 
-### 16.4 Desktop build smoke run
+### 16.4 Workbook recalculation check
+
+`GET /api/export/workbook` and `POST /api/calculators/fuse_protection/export` are saved, recalculated headless (`soffice --headless --convert-to xlsx`, needs `libreoffice-calc`), reopened with `openpyxl` (`data_only=True`) and every result cell is compared with the app's value in the adjacent column (tolerance 2 %). Last run: 22 result cells across seven calculators matched, no `#` errors, invoice job total and estimate total equal the sum of line formulas.
+
+### 16.5 Desktop build smoke run
 
 `python desktop/build.py --skip-frontend` on Linux, then run `dist/MarineDocIntelligence/MarineDocIntelligence` with `MDI_DATA_DIR` set to a scratch directory and `MDI_PORT=8767`: `/api/status` reports `tesseract`, `/` serves the UI, uploading the scanned and text sample manuals reaches `ready` (4 OCR pages / 26 entities and 0 OCR pages / 36 entities), page images return 200, and `/api/ask` returns an extractive answer. Repeat on Windows and macOS from the CI artifacts before a release.
 
@@ -623,9 +652,10 @@ With the app running and the sample documents uploaded, a Playwright script (kep
 | Semantic search | Default provider is lexical (hashed TF-IDF); recall for paraphrases is limited without Voyage or a local transformer. |
 | AI path | The live Claude request/response path (structured output, citation verification on real answers) is not exercised in CI; only the fallback is. `MDI_AI_EFFORT` is read but not sent. |
 | Comparison | Document roles are inferred from equipment keywords/titles; unusual documents may be mis-roled and skip conflict checks. |
-| Calculators | Ampacity and resistance tables are typical published values, not a standards implementation; no temperature correction in voltage drop; standard fuse series is generic. |
+| Calculators | Ampacity and resistance tables are typical published values, not a standards implementation; no temperature correction in voltage drop; standard fuse series is generic. Workbook formulas omit the `battery_main` ampacity clamp and mm² ampacity interpolation (§13.1). |
+| Exports | Report PDFs are text-only (no page thumbnails or highlight crops); searchable-PDF word placement is only as good as the OCR boxes; workbooks are unsigned openpyxl files, so Excel shows formula results only after opening (no cached values). |
 | Platform | SQLite single-node; FTS5 query is SQLite-specific so `MDI_DATABASE_URL` pointing elsewhere would need an FTS replacement; no authentication or multi-tenancy; CORS is `*`. |
-| UI | No PDF text layer (renders are images); no annotation persistence; e2e script not in repo. |
+| UI | Viewer renders are images (the searchable-PDF export carries the text layer instead); no annotation persistence; e2e script not in repo. |
 | Desktop | Builds are unsigned (SmartScreen/Gatekeeper warn on first launch); macOS and Linux builds need Tesseract installed separately; no auto-update; the API listens on localhost without authentication, so any local process can reach it while the app is open. |
 
 ## 18. Roadmap

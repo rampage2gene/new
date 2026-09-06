@@ -4,16 +4,17 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..calculators.base import CalculationError
 from ..calculators.modules import get_calculator, list_specs
+from ..calculators.suggest import suggest_inputs as _suggest_inputs
 from ..db import get_db
 from ..models import Document, Entity
-from .serializers import entity_dict
 
 router = APIRouter(prefix="/api/calculators", tags=["calculators"])
 
@@ -50,22 +51,22 @@ def suggest_inputs(calc_id: str, document_id: str, db: Session = Depends(get_db)
         raise HTTPException(404, "Document not found")
     ents = db.execute(select(Entity).where(Entity.document_id == document_id)).scalars().all()
     name = doc.title or doc.filename
-    suggestions: dict[str, list[dict]] = {}
-    for inp in calc.spec.inputs:
-        if not inp.entity_types:
-            continue
-        cands = [e for e in ents if e.entity_type in inp.entity_types]
-        if inp.key == "manufacturer_fuse":
-            cands = [e for e in cands if e.qualifier != "maximum"]
-        if inp.key == "manufacturer_max_fuse":
-            cands = [e for e in cands if e.qualifier == "maximum"]
-
-        def rank(e: Entity) -> tuple:
-            q = 0 if (inp.qualifiers and e.qualifier in inp.qualifiers) else (1 if not inp.qualifiers else 2)
-            if inp.key == "voltage" and e.circuit == "ac":
-                q += 2
-            return (q, -e.confidence, e.page_number)
-
-        cands.sort(key=rank)
-        suggestions[inp.key] = [entity_dict(e, name) for e in cands[:6]]
+    suggestions = _suggest_inputs(calc, ents, name)
     return {"calculator": calc.spec.id, "document": {"id": doc.id, "name": name}, "suggestions": suggestions}
+
+
+@router.post("/{calc_id}/export")
+def export_calculator(calc_id: str, req: RunRequest, request: Request) -> Response:
+    """The current calculation as an Excel workbook whose results are live
+    formulas over the input cells."""
+    from ..exports.workbook import build_calculator_workbook
+
+    try:
+        data = build_calculator_workbook(calc_id, req.inputs, base_url=str(request.base_url).rstrip("/"))
+    except CalculationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{calc_id}.xlsx"'},
+    )

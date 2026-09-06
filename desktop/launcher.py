@@ -161,6 +161,12 @@ def open_window(url: str, on_close) -> bool:
         log.warning("pywebview unavailable (%s); falling back to the browser", exc)
         return False
     try:
+        # Exports (workbooks, PDFs, conversions) are browser downloads; let the
+        # native web view save them instead of swallowing them.
+        try:
+            webview.settings["ALLOW_DOWNLOADS"] = True
+        except Exception:  # pragma: no cover - older pywebview
+            pass
         window = webview.create_window(
             APP_NAME, url, width=1440, height=900, min_size=(1024, 640), text_select=True
         )

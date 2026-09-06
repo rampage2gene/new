@@ -21,6 +21,7 @@ class SourceRef:
     entity_id: str | None = None
     snippet: str | None = None
     confidence: float | None = None
+    bbox: list[float] | None = None
 
 
 @dataclass
@@ -47,6 +48,15 @@ class CalculatorSpec:
     inputs: list[InputSpec]
     outputs: list[dict]
     notes: list[str] = field(default_factory=list)
+    # Spreadsheet export: ordered rows of {"key", "label", "unit", "formula", "kind", "classification"}.
+    # `formula` is an Excel formula template; placeholders are expanded by exports/workbook.py:
+    #   {key}       number input -> N(cell)  (blank/text counts as 0);  text/select input -> cell
+    #   {pct:key}   percentage input normalised to a 0-1 fraction (90 -> 0.9, 0.9 -> 0.9)
+    #   {h:name}    a helper row (kind="helper") defined earlier in the same list
+    #   {r:key}     a result row defined earlier in the same list
+    #   {raw:key}   the input cell address without N()
+    #   Reference sheet named ranges (AwgTable, Mm2Table, FuseSizes, DeviceTable) may be used directly.
+    excel: list[dict] = field(default_factory=list)
 
 
 @dataclass

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import calculators, documents, entities, exports, search
+from .api import calculators, convert, documents, entities, exports, search
 from .config import get_settings
 from .db import init_db
 
@@ -23,7 +23,7 @@ def create_app() -> FastAPI:
     init_db()
     app = FastAPI(title="Marine Electrical Document Intelligence", version="0.1.0")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-    for r in (documents.router, entities.router, search.router, calculators.router, exports.router):
+    for r in (documents.router, entities.router, search.router, calculators.router, exports.router, convert.router):
         app.include_router(r)
 
     dist = Path(settings.frontend_dist)

@@ -179,3 +179,10 @@ ul.plain { padding-left: 18px; margin: 4px 0; } ul.plain li { margin-bottom: 3px
 .legend .confirmed::before { border-color: var(--ok); } .legend .high::before { border-color: var(--accent); } .legend .possible::before { border-color: var(--warn); border-style: dashed; } .legend .unknown::before { border-color: var(--crit); border-style: dotted; }
 .conf-confirmed { color: var(--ok); font-weight: 600; } .conf-high { color: var(--accent); font-weight: 600; } .conf-possible { color: var(--warn); font-weight: 600; } .conf-unknown { color: var(--crit); font-weight: 600; }
 kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; background: #f8fafc; }
+.menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 6px 0; text-align: left; }
+.menu-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 6px 12px 2px; }
+.menu-item { display: flex; flex-direction: column; padding: 6px 12px; color: var(--text); text-decoration: none; cursor: pointer; white-space: nowrap; }
+.menu-item:hover { background: var(--accent-soft); }
+.convert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.filelist { margin: 8px 0; padding: 0; list-style: none; font-size: 12px; } .filelist li { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.report-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; padding: 8px 10px; background: var(--accent-soft); border-radius: 6px; }

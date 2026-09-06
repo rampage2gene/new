@@ -5,7 +5,7 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -78,6 +78,28 @@ def _cell(v):
     if isinstance(v, (list, dict)):
         return json.dumps(v, default=str) if v else ""
     return v
+
+
+@router.get("/export/workbook")
+def export_workbook(
+    request: Request,
+    document_ids: list[str] | None = Query(default=None),
+    include: str = Query(default="data,tables,calculators,invoices", description="comma-separated: data, tables, calculators, invoices"),
+    calculators: list[str] | None = Query(default=None, description="calculator ids to include (default: all)"),
+    db: Session = Depends(get_db),
+) -> Response:
+    """One Excel workbook: technical data with page links, detected tables,
+    calculator sheets with live formulas prefilled from the documents, and
+    invoice sheets with SUM/SUMIF totals."""
+    from ..exports.workbook import build_workbook
+
+    parts = {p.strip() for p in include.split(",") if p.strip()}
+    data = build_workbook(db, document_ids, parts, base_url=str(request.base_url).rstrip("/"), calculators=calculators)
+    return Response(
+        data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="marine-electrical-workbook.xlsx"'},
+    )
 
 
 @router.get("/export/entities")

@@ -60,6 +60,9 @@ DC_CURRENT = Calculator(
             InputSpec("voltage", "System voltage", "V", entity_types=["voltage"], qualifiers=["nominal"]),
         ],
         outputs=[{"key": "current", "label": "DC current", "unit": "A"}],
+        excel=[
+            {"key": "current", "label": "DC current", "unit": "A", "formula": "={power}/{voltage}"},
+        ],
     ),
     _dc_current,
 )
@@ -108,6 +111,10 @@ INVERTER_DC_CURRENT = Calculator(
             InputSpec("low_voltage", "Low battery voltage (optional)", "V", required=False, entity_types=["voltage"], qualifiers=["cutoff", "minimum"]),
         ],
         outputs=[{"key": "current", "label": "DC input current", "unit": "A"}],
+        excel=[
+            {"key": "current", "label": "DC input current at nominal voltage", "unit": "A", "formula": "={power}/{voltage}/{pct:efficiency}"},
+            {"key": "current_low_voltage", "label": "DC current at low battery voltage", "unit": "A", "formula": '=IF({low_voltage}>0,{power}/{low_voltage}/{pct:efficiency},"")'},
+        ],
     ),
     _inverter_dc_current,
 )
@@ -180,6 +187,18 @@ VOLTAGE_DROP = Calculator(
             InputSpec("material", "Conductor material", None, kind="select", default="copper", options=[{"value": "copper", "label": "Copper"}, {"value": "aluminium", "label": "Aluminium"}]),
         ],
         outputs=[{"key": "voltage_drop", "label": "Voltage drop", "unit": "V"}, {"key": "percent", "label": "Drop", "unit": "%"}],
+        excel=[
+            {"key": "awg_key", "label": "Conductor size key (AWG)", "kind": "helper", "formula": '=SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(UPPER(TRIM({raw:size}))," ",""),"AWG",""),"#","")'},
+            {"key": "is_al", "label": "Aluminium conductor?", "kind": "helper", "formula": '=LEFT(LOWER(TRIM({raw:material})),2)="al"'},
+            {"key": "ohm_per_m", "label": "Resistance per metre at 20 °C", "unit": "Ω/m", "kind": "helper",
+             "formula": '=IFERROR(VLOOKUP({h:awg_key},AwgTable,2,FALSE)/304.8*IF({h:is_al},1.64,1),IF({h:is_al},0.0282,0.01724)/VALUE(LEFT(TRIM({raw:size}),FIND("M",UPPER(TRIM({raw:size})))-1)))'},
+            {"key": "length_m", "label": "One-way length", "unit": "m", "kind": "helper", "formula": '=IF(LEFT(LOWER(TRIM({raw:length_unit})),1)="f",{length}*0.3048,{length})'},
+            {"key": "voltage_drop", "label": "Voltage drop", "unit": "V", "formula": "={current}*{h:ohm_per_m}*2*{h:length_m}"},
+            {"key": "percent", "label": "Voltage drop", "unit": "%", "formula": "={r:voltage_drop}/{voltage}*100"},
+            {"key": "voltage_at_load", "label": "Voltage at load", "unit": "V", "formula": "={voltage}-{r:voltage_drop}"},
+            {"key": "resistance", "label": "Circuit resistance", "unit": "mΩ", "formula": "={h:ohm_per_m}*2*{h:length_m}*1000"},
+            {"key": "check", "label": "Limit check", "kind": "text", "formula": '=IF({r:percent}>10,"Exceeds 10 % (non-critical limit)",IF({r:percent}>3,"Exceeds 3 % (critical-circuit limit)","Within 3 %"))'},
+        ],
     ),
     _voltage_drop,
 )
@@ -231,6 +250,12 @@ BATTERY_RUNTIME = Calculator(
             InputSpec("dod", "Depth of discharge", "%", default=80),
         ],
         outputs=[{"key": "runtime_hours", "label": "Runtime", "unit": "h"}],
+        excel=[
+            {"key": "usable_energy", "label": "Usable energy", "unit": "Wh", "formula": "={capacity}*{voltage}*{pct:dod}"},
+            {"key": "dc_draw", "label": "DC draw", "unit": "W", "kind": "helper", "formula": "={load}/{pct:efficiency}"},
+            {"key": "runtime_hours", "label": "Estimated runtime", "unit": "h", "formula": "={r:usable_energy}/{h:dc_draw}"},
+            {"key": "dc_current", "label": "Average DC current", "unit": "A", "formula": "={h:dc_draw}/{voltage}"},
+        ],
     ),
     _battery_runtime,
 )
@@ -304,6 +329,13 @@ ALTERNATOR_CHARGING = Calculator(
             InputSpec("charge_efficiency", "Charge efficiency", "%", default=95),
         ],
         outputs=[{"key": "hours", "label": "Charge time", "unit": "h"}],
+        excel=[
+            {"key": "available", "label": "Alternator hot output", "unit": "A", "kind": "helper", "formula": "={alternator_output}*{pct:derate}"},
+            {"key": "charge_current", "label": "Effective charge current", "unit": "A", "formula": "=IF(AND({max_charge_current}>0,{max_charge_current}<{h:available}),{max_charge_current},{h:available})"},
+            {"key": "ah_needed", "label": "Charge required", "unit": "Ah", "formula": "={capacity}*({soc_end}-{soc_start})/100"},
+            {"key": "hours", "label": "Estimated bulk charge time", "unit": "h", "formula": "={r:ah_needed}/({r:charge_current}*{pct:charge_efficiency})"},
+            {"key": "limited_by", "label": "Limited by", "kind": "text", "formula": '=IF({r:charge_current}<{h:available},"battery / BMS charge limit","alternator")'},
+        ],
     ),
     _alternator_charging,
 )
@@ -351,6 +383,12 @@ AC_LOAD = Calculator(
             InputSpec("power_factor", "Power factor", None, default=1.0),
         ],
         outputs=[{"key": "watts", "label": "Watts", "unit": "W"}, {"key": "va", "label": "VA", "unit": "VA"}, {"key": "amps", "label": "Amps", "unit": "A"}],
+        excel=[
+            {"key": "pf", "label": "Power factor (fraction)", "kind": "helper", "formula": "={pct:power_factor}"},
+            {"key": "amps", "label": "Current", "unit": "A", "formula": "=IF({current}>0,{current},({power}/{h:pf})/{voltage})"},
+            {"key": "va", "label": "Apparent power", "unit": "VA", "formula": "={voltage}*{r:amps}"},
+            {"key": "watts", "label": "Real power", "unit": "W", "formula": "=IF({current}>0,{r:va}*{h:pf},{power})"},
+        ],
     ),
     _ac_load,
 )
@@ -517,6 +555,26 @@ FUSE_PROTECTION = Calculator(
         notes=[
             "Fuse selection depends on the device, its surge behaviour and the conductor - never on cable size alone.",
             "A calculated value is never presented as a manufacturer requirement.",
+        ],
+        excel=[
+            {"key": "k", "label": "Load factor k (from device type)", "kind": "helper", "formula": "=IFERROR(VLOOKUP({raw:device_type},DeviceTable,2,FALSE),1.25)"},
+            {"key": "awg_key", "label": "Conductor size key (AWG)", "kind": "helper", "formula": '=SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(UPPER(TRIM({raw:conductor_size}))," ",""),"AWG",""),"#","")'},
+            {"key": "mm2", "label": "Conductor size (mm², if metric)", "kind": "helper", "formula": '=IFERROR(VALUE(LEFT(TRIM({raw:conductor_size}),FIND("M",UPPER(TRIM({raw:conductor_size})))-1)),"")'},
+            {"key": "derate", "label": "Engine-space derating", "kind": "helper", "formula": '=IF(LOWER(TRIM({raw:engine_space}))="yes",0.85,1)'},
+            {"key": "calc_min", "label": "Calculated minimum (I × k)", "unit": "A", "kind": "helper", "formula": '=IF({continuous_current}>0,{continuous_current}*{h:k},"")'},
+            {"key": "manufacturer_required", "label": "Manufacturer-specified fuse", "unit": "A", "classification": "manufacturer_required", "formula": '=IF({manufacturer_fuse}>0,{manufacturer_fuse},"")'},
+            {"key": "calculated_estimate", "label": "Calculated fuse size (engineering estimate)", "unit": "A", "classification": "calculated_estimate",
+             "formula": '=IF({continuous_current}>0,INDEX(FuseSizes,IFERROR(MATCH({h:calc_min}-0.000001,FuseSizes,1)+1,1)),"")'},
+            {"key": "conductor_ampacity", "label": "Conductor ampacity (typical, 105 °C)", "unit": "A", "classification": "calculated_estimate",
+             "formula": '=IFERROR(VLOOKUP({h:awg_key},AwgTable,3,FALSE)*{h:derate},IFERROR(VLOOKUP({h:mm2},Mm2Table,2,FALSE)*{h:derate},""))'},
+            {"key": "rec_raw", "label": "Recommendation before conductor check", "unit": "A", "kind": "helper", "formula": '=IF({manufacturer_fuse}>0,{manufacturer_fuse},{r:calculated_estimate})'},
+            {"key": "rec_capped", "label": "Recommendation capped by conductor", "unit": "A", "kind": "helper",
+             "formula": '=IF(AND(ISNUMBER({r:conductor_ampacity}),ISNUMBER({h:rec_raw})),IF({h:rec_raw}>{r:conductor_ampacity},INDEX(FuseSizes,MATCH({r:conductor_ampacity},FuseSizes,1)),{h:rec_raw}),{h:rec_raw})'},
+            {"key": "recommended", "label": "Recommended protection (pending verification)", "unit": "A", "classification": "recommended_pending_verification",
+             "formula": '=IF(AND({manufacturer_max_fuse}>0,ISNUMBER({h:rec_capped})),MIN({h:rec_capped},{manufacturer_max_fuse}),{h:rec_capped})'},
+            {"key": "conductor_check", "label": "Conductor protection check", "kind": "text", "classification": "recommended_pending_verification",
+             "formula": '=IF(NOT(ISNUMBER({r:conductor_ampacity})),"no conductor size given",IF({continuous_current}>{r:conductor_ampacity},"CONTINUOUS CURRENT EXCEEDS CONDUCTOR AMPACITY",IF(AND(ISNUMBER({r:recommended}),{r:recommended}>{r:conductor_ampacity}),"FUSE EXCEEDS CONDUCTOR AMPACITY","OK - fuse protects the conductor")))'},
+            {"key": "characteristic", "label": "Fuse characteristic", "kind": "text", "classification": "recommended_pending_verification", "formula": '=IFERROR(VLOOKUP({raw:device_type},DeviceTable,4,FALSE),"")'},
         ],
     ),
     _fuse_protection,

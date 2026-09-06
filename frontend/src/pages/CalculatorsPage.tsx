@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, readReportCalcs, writeReportCalcs } from "../api";
 import { readPrefill, writePrefill } from "../components/SendToCalculator";
 import type { CalcInputValue, CalcResult, CalculatorSpec, DocumentSummary, Entity, InputSpec } from "../types";
 
@@ -28,6 +28,47 @@ export default function CalculatorsPage() {
   const [result, setResult] = useState<CalcResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reportCalcs, setReportCalcs] = useState<CalcResult[]>(() => readReportCalcs());
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+
+  const payloadFromForm = () => {
+    const payload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(form)) {
+      if (v.value === "" || v.value == null) continue;
+      payload[k] = v.source ? { value: v.value, unit: v.unit, source: v.source } : v.value;
+    }
+    return payload;
+  };
+
+  const openInExcel = async () => {
+    if (!spec) return;
+    setExportMsg(null);
+    try {
+      const name = await api.exportCalculator(spec.id, payloadFromForm());
+      setExportMsg(`Saved ${name}: inputs are editable cells, results are formulas.`);
+    } catch (e: any) {
+      setExportMsg(e.message);
+    }
+  };
+
+  const addToReport = () => {
+    if (!result) return;
+    const next = [...reportCalcs, result];
+    setReportCalcs(next);
+    writeReportCalcs(next);
+  };
+
+  const clearReport = () => { setReportCalcs([]); writeReportCalcs([]); };
+
+  const downloadReport = async () => {
+    setExportMsg(null);
+    try {
+      const docIds = Array.from(new Set(reportCalcs.flatMap((c) => c.sources.map((s) => s.document_id).filter(Boolean) as string[])));
+      await api.exportReport({ document_ids: docIds, sections: ["spec_extraction"], calculations: reportCalcs, title: "Electrical calculations report" });
+    } catch (e: any) {
+      setExportMsg(e.message);
+    }
+  };
 
   useEffect(() => {
     api.calculators().then((s) => { setSpecs(s); if (!calcId && s.length) navigate(`/calculators/${s[0].id}`, { replace: true }); });
@@ -68,12 +109,7 @@ export default function CalculatorsPage() {
     setBusy(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(form)) {
-        if (v.value === "" || v.value == null) continue;
-        payload[k] = v.source ? { value: v.value, unit: v.unit, source: v.source } : v.value;
-      }
-      setResult(await api.runCalculator(spec.id, payload));
+      setResult(await api.runCalculator(spec.id, payloadFromForm()));
       writePrefill(null);
     } catch (e: any) {
       setError(e.message);
@@ -140,12 +176,26 @@ export default function CalculatorsPage() {
               );
             })}
             {error && <div className="alert crit">{error}</div>}
-            <button className="btn primary" onClick={run} disabled={busy}>{busy ? "Calculating…" : "Calculate"}</button>
+            <div className="row">
+              <button className="btn primary" onClick={run} disabled={busy}>{busy ? "Calculating…" : "Calculate"}</button>
+              <button className="btn" onClick={openInExcel} title="Excel workbook: these inputs as editable cells, results as live formulas">Open in Excel</button>
+            </div>
+            {exportMsg && <div className="small muted" style={{ marginTop: 6 }}>{exportMsg}</div>}
+            {reportCalcs.length > 0 && (
+              <div className="report-bar small">
+                <span><b>{reportCalcs.length}</b> calculation{reportCalcs.length === 1 ? "" : "s"} collected for a report</span>
+                <button className="btn sm" onClick={downloadReport}>Download report (.pdf)</button>
+                <button className="btn sm" onClick={clearReport}>Clear</button>
+              </div>
+            )}
           </div>
         )}
         {result && (
           <div className="calc-result card">
-            <h2>{result.calculator_name}</h2>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <h2 style={{ margin: 0 }}>{result.calculator_name}</h2>
+              <button className="btn sm" onClick={addToReport} title="Collect this result; download all collected results as one PDF report">+ Add to report</button>
+            </div>
             <div className="mono small muted" style={{ marginBottom: 8 }}>{result.formula}</div>
             {result.results.map((r) => (
               <div key={r.key} style={{ marginBottom: 10 }}>
