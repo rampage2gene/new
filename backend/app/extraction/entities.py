@@ -191,7 +191,7 @@ def _primary_qualifier(quals: list[str], entity_type: str) -> str | None:
         "power": ["continuous", "peak", "surge", "maximum", "nominal", "input", "output", "idle"],
         "temperature": ["operating", "storage", "charging", "derating", "maximum", "minimum", "cutoff"],
         "torque": ["maximum", "recommended", "required"],
-        "wire_size": ["minimum", "recommended", "required", "maximum"],
+        "wire_size": ["minimum", "recommended", "required"],
     }
     allowed = priority.get(entity_type)
     if allowed is None:
@@ -199,7 +199,7 @@ def _primary_qualifier(quals: list[str], entity_type: str) -> str | None:
     for q in quals:  # nearest first
         if q in allowed:
             return q
-    return quals[0]
+    return None
 
 
 def _circuit(context: str) -> str | None:

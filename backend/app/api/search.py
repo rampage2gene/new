@@ -71,7 +71,9 @@ def diagram_get(document_id: str, page_number: int, db: Session = Depends(get_db
 
     rec = db.execute(select(DiagramAnalysis).where(DiagramAnalysis.document_id == document_id, DiagramAnalysis.page_number == page_number)).scalar_one_or_none()
     if not rec:
-        raise HTTPException(404, "No analysis for this page yet")
+        from fastapi.responses import Response
+
+        return Response(status_code=204)  # no analysis yet (not an error)
     from ..ai.diagrams import _out
 
     return _out(rec)

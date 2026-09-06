@@ -65,7 +65,7 @@ QUALIFIERS: list[tuple[str, re.Pattern]] = [
     ("required", re.compile(r"\brequired?\b|\bmust\b|\bshall\b|\bmandatory\b", re.I)),
     ("input", re.compile(r"\binput\b|\bincoming\b|\bsupply\b", re.I)),
     ("output", re.compile(r"\boutput\b|\bload\b|\boutgoing\b", re.I)),
-    ("charging", re.compile(r"\bcharg(?:e|ing|er)\b|\babsorption\b|\bbulk\b|\bfloat\b|\bequali[sz]", re.I)),
+    ("charging", re.compile(r"\bcharg(?:e|ing)\b|\bcharger output\b|\babsorption\b|\bbulk\b|\bfloat\b|\bequali[sz]", re.I)),
     ("idle", re.compile(r"\bidle\b|\bno[- ]load\b|\bstandby\b|\bquiescent\b|\bself[- ]consumption\b", re.I)),
     ("short_circuit", re.compile(r"\bshort[- ]circuit\b|\bfault current\b|\binterrupt(?:ing)? (?:capacity|rating)\b|\bAIC\b|\bbreaking capacity\b", re.I)),
     ("cutoff", re.compile(r"\bcut[- ]?off\b|\bshut[- ]?down\b|\bdisconnect\b|\balarm\b|\brestart\b", re.I)),

@@ -153,6 +153,7 @@ def test_diagram_heuristic(client, manual_doc):
     assert r["engine"] == "heuristic" and r["connections"] == [] and r["confidence_legend"]
     assert all(c["confidence"] == "possible" for c in r["components"])
     assert client.get(f"/api/documents/{manual_doc['id']}/pages/4/diagram").status_code == 200
+    assert client.get(f"/api/documents/{manual_doc['id']}/pages/1/diagram").status_code == 204
 
 
 def test_delete_document(client, photo_doc):
