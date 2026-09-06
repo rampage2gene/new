@@ -12,6 +12,8 @@ Every answer, extracted value and calculator input keeps its source: document,
 page, section, the exact text, and a bounding box that is highlighted in the
 viewer. Nothing is presented as a manufacturer fact without a source.
 
+**Specification:** [docs/SPEC.md](docs/SPEC.md) (requirements, pipeline and rule contracts, roadmap), [docs/API.md](docs/API.md) (endpoint contracts), [docs/DATA_MODEL.md](docs/DATA_MODEL.md) (storage and JSON shapes).
+
 ## What it does
 
 | Capability | Where |
@@ -60,6 +62,8 @@ Every stage exchanges plain data structures (`RawPage`/`RawBlock`, `ExtractedEnt
 replaced independently. OCR engines implement `OCREngine` (`app/ocr/base.py`);
 embedding providers implement `EmbeddingProvider` (`app/search/semantic.py`);
 calculators register in `app/calculators/modules.py`.
+
+Stage-by-stage contracts, thresholds and the extension points are specified in [docs/SPEC.md](docs/SPEC.md); tables and JSON payloads in [docs/DATA_MODEL.md](docs/DATA_MODEL.md).
 
 ### Data model of an extracted value
 
