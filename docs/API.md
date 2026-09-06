@@ -183,6 +183,7 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | Method & path | Request | Response |
 |---|---|---|
 | `POST /documents` | multipart form, field `files` repeated (PDF or image) | 201 `[DocumentSummary]` with `status: "queued"`; processing starts in the background (inline when `MDI_BACKGROUND_PROCESSING=false`). 413 over `MDI_MAX_UPLOAD_MB`; 415 unknown type. |
+| `POST /documents/import` | `{"paths": [str]}` - local file paths (the desktop app's Open dialog; the server reads the files itself, nothing is uploaded) | 201 `[DocumentSummary]` as for upload. 400 when a path is not a file; 415 unknown type. |
 | `GET /documents` | — | `[DocumentSummary]`, newest first |
 | `GET /documents/{id}` | — | `DocumentDetail` |
 | `DELETE /documents/{id}` | — | 204; removes rows, index entries and files |
@@ -211,7 +212,7 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | `POST /compare` | `{"document_ids": [2–8 ids], "question": str \| null}` | `CompareResult` |
 | `POST /documents/{id}/pages/{n}/diagram` | `?force=true` to re-run | `DiagramAnalysis` (404 unknown page) |
 | `GET /documents/{id}/pages/{n}/diagram` | — | `DiagramAnalysis`, or 204 when the page has not been analysed |
-| `GET /status` | — | `{"ocr_engine": "tesseract"\|"none", "ai_available": bool, "ai_model": str\|null, "embedding_provider": str, "version": "0.1.2", "max_upload_mb": int}` |
+| `GET /status` | — | `{"ocr_engine": "tesseract"\|"none", "ai_available": bool, "ai_model": str\|null, "embedding_provider": str, "version": "0.1.3", "max_upload_mb": int}` |
 
 ### Diagnostics
 

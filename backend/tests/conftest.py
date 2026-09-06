@@ -12,6 +12,7 @@ def data_dir(tmp_path_factory) -> Path:
     os.environ["MDI_DATA_DIR"] = str(d)
     os.environ["MDI_AI_ENABLED"] = "false"
     os.environ["MDI_BACKGROUND_PROCESSING"] = "false"
+    os.environ["MDI_INBOX_WATCHER"] = "false"
     from app.config import get_settings
     from app.db import reset_engine
 

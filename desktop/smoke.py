@@ -10,6 +10,7 @@ document reaches status "ready" with two pages, 1 otherwise.
 from __future__ import annotations
 
 import json
+import shutil
 import os
 import socket
 import subprocess
@@ -66,6 +67,29 @@ def upload_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
     return last
 
 
+
+def inbox_roundtrip(data_dir: Path, pdf: Path, timeout: float = 240) -> Path | None:
+    """Copy the PDF into <data_dir>/inbox and wait for done/<stem>.ocr.pdf."""
+    inbox = data_dir / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    target = inbox / "inbox-sample.pdf"
+    shutil.copyfile(pdf, target)
+    expected = inbox / "done" / "inbox-sample.ocr.pdf"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if expected.exists():
+            return expected
+        failed = list((inbox / "failed").glob("inbox-sample*")) if (inbox / "failed").exists() else []
+        if failed:
+            print(f"inbox: file moved to failed/: {[f.name for f in failed]}")
+            for f in failed:
+                if f.suffix == ".txt":
+                    print(f.read_text(encoding="utf-8", errors="replace"))
+            return None
+        time.sleep(1)
+    return None
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -84,6 +108,7 @@ def main() -> int:
     status = None
     doc = None
     diag = None
+    inbox_out = None
     try:
         while time.time() < deadline:
             if proc.poll() is not None:
@@ -112,6 +137,11 @@ def main() -> int:
                 print(f"upload failed: {type(exc).__name__}: {exc}")
                 if proc.poll() is not None:
                     print(f"process died during upload/processing with code {proc.returncode}")
+            try:
+                inbox_out = inbox_roundtrip(data_dir, pdf)
+                print(f"inbox: {'wrote ' + str(inbox_out) if inbox_out else 'no OCR PDF appeared'}")
+            except Exception as exc:
+                print(f"inbox failed: {type(exc).__name__}: {exc}")
     finally:
         if proc.poll() is None:
             proc.terminate()
@@ -129,6 +159,9 @@ def main() -> int:
     elif not doc or doc.get("status") != "ready" or (doc.get("page_count") or 0) != 2:
         ok = False
         print("FAILED: the uploaded PDF was not processed to 'ready' with 2 pages")
+    elif not inbox_out or inbox_out.stat().st_size == 0:
+        ok = False
+        print("FAILED: a PDF copied into the inbox folder did not come back as done/<name>.ocr.pdf")
     else:
         print(f"OK: {status}")
         print(f"log file present: {log.exists()}")

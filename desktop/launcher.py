@@ -23,7 +23,7 @@ from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -248,6 +248,32 @@ class ApiServer:
 
 
 # --------------------------------------------------------------------------- window
+
+class Bridge:
+    """Functions the page can call as `window.pywebview.api.<name>()`.
+
+    `pick_files` opens the ordinary operating-system Open dialog and returns
+    the chosen paths. The page hands those to `POST /api/documents/import`, so
+    the server reads the files straight off the disk and the bytes never pass
+    through the web view - the one part of an upload the web view can fail
+    without being able to say why.
+    """
+
+    FILE_TYPES = (
+        "Documents (*.pdf;*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.bmp;*.webp)",
+        "All files (*.*)",
+    )
+
+    def pick_files(self) -> list[str]:
+        import webview
+
+        window = webview.windows[0]
+        paths = window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True, file_types=self.FILE_TYPES)
+        chosen = [str(p) for p in (paths or [])]
+        log.info("open dialog: %d file(s) chosen", len(chosen))
+        return chosen
+
+
 def open_window(url: str, on_close) -> bool:
     """Open `url` in a native window. Returns False when no GUI backend exists."""
     try:
@@ -263,7 +289,7 @@ def open_window(url: str, on_close) -> bool:
         except Exception:  # pragma: no cover - older pywebview
             pass
         window = webview.create_window(
-            APP_NAME, url, width=1440, height=900, min_size=(1024, 640), text_select=True
+            APP_NAME, url, width=1440, height=900, min_size=(1024, 640), text_select=True, js_api=Bridge()
         )
         window.events.closed += on_close
         kwargs = {}

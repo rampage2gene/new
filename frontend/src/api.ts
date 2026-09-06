@@ -120,6 +120,17 @@ export const api = {
     return res.text();
   },
   listDocuments: () => request<DocumentSummary[]>("/api/documents"),
+  /** Ingest files the server can read off the disk itself (paths from the native Open dialog). */
+  importPaths: (paths: string[]) => request<DocumentSummary[]>("/api/documents/import", json({ paths })),
+  /** Open the operating system's file dialog through the desktop app's bridge.
+   *  Resolves to null outside the desktop app (plain browser, dev server), so
+   *  callers fall back to the ordinary <input type=file>. */
+  pickNativeFiles: async (): Promise<string[] | null> => {
+    const bridge = (window as any).pywebview?.api;
+    if (!bridge?.pick_files) return null;
+    const paths = await bridge.pick_files();
+    return Array.isArray(paths) ? paths : [];
+  },
   getDocument: (id: string) => request<DocumentDetail>(`/api/documents/${id}`),
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, { method: "DELETE" }),
   reprocessDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/reprocess`, { method: "POST" }),

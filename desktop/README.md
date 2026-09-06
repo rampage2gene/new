@@ -69,8 +69,30 @@ If the folder cannot be written to (unzipped into `Program Files`, or read-only
 media), the app falls back to the per-user directory rather than failing. To
 remove a portable copy, delete the folder.
 
+## Adding documents
+
+Three ways, all ending in the same processing:
+
+1. **Upload documents** button - in the desktop app this opens the ordinary
+   Windows/macOS Open dialog; the app then reads the files straight off the
+   disk. (In a plain browser it is the browser's file picker.)
+2. **Drag and drop** onto the library.
+3. **The inbox folder.** Copy PDFs or images into `<data dir>\inbox` - for a
+   portable copy that is the `data\inbox` folder next to the executable - and
+   the app picks them up within a couple of seconds. When processing finishes
+   the original moves to `inbox\done\` next to `<name>.ocr.pdf`, the same
+   pages with a searchable text layer. Anything that could not be processed
+   moves to `inbox\failed\` with a `.error.txt` saying why. Nothing to click.
+
+The inbox is the one to use when the other two fail: it does not involve the
+web view at all.
+
 ## Troubleshooting
 
+- **Copying a bug report.** When an upload or import fails, the red error box
+  has a "Details for a bug report" section: the version, the folders in use and
+  the last 40 log lines, with a Copy button. Paste that wherever you are asking
+  for help.
 - **Diagnostics page.** The sidebar's **Diagnostics** entry shows the version,
   the data folder, the OCR engine and the application log, with buttons to copy
   the log or the summary to the clipboard. Start here for anything below.

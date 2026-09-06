@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # Processing: run the pipeline in worker threads (False = inline, used by tests)
     background_processing: bool = True
     ingest_workers: int = 2
+    # Watch <data_dir>/inbox for dropped files (False in tests, which call scan_once())
+    inbox_watcher: bool = True
 
     # Serving
     frontend_dist: Path = REPO_DIR / "frontend" / "dist"

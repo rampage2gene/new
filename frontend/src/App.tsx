@@ -50,6 +50,8 @@ export default function App() {
               AI reasoning: <b>{status.ai_available ? status.ai_model : "not configured"}</b>
               <br />
               Embeddings: <b>{status.embedding_provider}</b>
+              <br />
+              <span className="muted">v{status.version}</span>
             </>
           ) : (
             "Connecting to API…"

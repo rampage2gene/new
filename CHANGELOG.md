@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.3 - 2026-09-06
+
+Two ways to get a document in that never pass through the browser upload, for
+the machines where that upload fails without saying why.
+
+- Added: the **Upload documents** button in the desktop app now opens the
+  operating system's own Open dialog and hands the chosen paths to the app,
+  which reads the files straight off the disk (`POST /api/documents/import`).
+  Drag-and-drop still works as before.
+- Added: an **inbox folder** (`<data dir>/inbox`, next to the executable for a
+  portable copy). Any PDF or image copied there is processed automatically and
+  comes back as `inbox/done/<name>.ocr.pdf` with a searchable text layer;
+  anything that cannot be processed moves to `inbox/failed/` with an
+  `.error.txt` explaining why. No clicking involved.
+- Added: an **OCR'd PDF** button on every processed document in the library.
+- Added: when an upload or import fails, the error now includes a
+  "Details for a bug report" block - version, folders, and the last 40 lines
+  of the log - with a Copy button.
+- Added: the app version is shown in the sidebar.
+
 ## v0.1.2 - 2026-09-06
 
 - Fixed: an upload that failed because Windows could not read the file reported

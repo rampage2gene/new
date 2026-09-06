@@ -83,3 +83,36 @@ def test_portable_data_dir_ignored_when_not_frozen(launcher, monkeypatch, tmp_pa
     monkeypatch.setattr(launcher, "FROZEN", False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "python"))
     assert launcher.portable_data_dir() is None
+
+
+def test_bridge_pick_files_uses_the_native_dialog(launcher, monkeypatch):
+    """The Upload button in the desktop app opens the OS dialog and hands back paths."""
+    import types
+
+    calls = {}
+
+    class FakeWindow:
+        def create_file_dialog(self, kind, allow_multiple=False, file_types=()):
+            calls["kind"] = kind
+            calls["allow_multiple"] = allow_multiple
+            calls["file_types"] = file_types
+            return ("C:\\Users\\me\\Desktop\\manual.pdf", "C:\\Users\\me\\scan.png")
+
+    fake = types.SimpleNamespace(OPEN_DIALOG="open", windows=[FakeWindow()])
+    monkeypatch.setitem(sys.modules, "webview", fake)
+
+    chosen = launcher.Bridge().pick_files()
+    assert chosen == ["C:\\Users\\me\\Desktop\\manual.pdf", "C:\\Users\\me\\scan.png"]
+    assert calls["kind"] == "open" and calls["allow_multiple"] is True
+    assert any("*.pdf" in ft for ft in calls["file_types"])
+
+
+def test_bridge_pick_files_cancel_is_empty(launcher, monkeypatch):
+    import types
+
+    class FakeWindow:
+        def create_file_dialog(self, *a, **k):
+            return None
+
+    monkeypatch.setitem(sys.modules, "webview", types.SimpleNamespace(OPEN_DIALOG="open", windows=[FakeWindow()]))
+    assert launcher.Bridge().pick_files() == []

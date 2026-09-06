@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,40 @@ from .serializers import block_dict, document_detail, document_summary, flag_dic
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 log = logging.getLogger(__name__)
+
+
+def create_document_from_file(db: Session, path: Path, filename: str, size: int | None = None) -> Document:
+    """Register a file that is already on disk and queue it for processing.
+
+    Every way a document can arrive - the multipart upload, a path from the
+    native Open dialog, a file copied into the inbox folder - ends here, so
+    identification, hashing, storage and queuing are the same for all of them.
+    Raises HTTPException(415) for anything that is not a PDF or an image.
+    """
+    ident = identify_file(path, filename)
+    if size is None:
+        size = path.stat().st_size
+    log.info("ingest: %s (%d bytes, %s)", filename, size, ident.file_type)
+    if ident.file_type == "unknown":
+        log.warning("ingest rejected: %s is not a PDF or an image (%s)", filename, ident.mime_type)
+        raise HTTPException(415, f"{filename}: unsupported file type. Upload a PDF or an image.")
+    doc = Document(
+        filename=filename,
+        file_type=ident.file_type,
+        mime_type=ident.mime_type,
+        size_bytes=size,
+        sha256=sha256_of(path),
+        storage_path="",
+        status="queued",
+        progress="Queued",
+    )
+    db.add(doc)
+    db.flush()
+    doc.storage_path = str(store_original(doc.id, path, doc.filename))
+    db.commit()
+    pipeline.submit(doc.id)
+    log.info("ingest: queued %s as document %s", doc.filename, doc.id)
+    return doc
 
 
 @router.post("", status_code=201)
@@ -48,30 +83,35 @@ async def upload_documents(files: list[UploadFile] = File(...), db: Session = De
                 tmp.write(chunk)
             tmp_path = Path(tmp.name)
         try:
-            ident = identify_file(tmp_path, up.filename)
-            log.info("upload: received %s (%d bytes, %s, %s)", up.filename, size, up.content_type or "no content-type", ident.file_type)
-            if ident.file_type == "unknown":
-                log.warning("upload rejected: %s is not a PDF or an image (%s)", up.filename, ident.mime_type)
-                raise HTTPException(415, f"{up.filename}: unsupported file type. Upload a PDF or an image.")
-            doc = Document(
-                filename=up.filename or tmp_path.name,
-                file_type=ident.file_type,
-                mime_type=ident.mime_type,
-                size_bytes=size,
-                sha256=sha256_of(tmp_path),
-                storage_path="",
-                status="queued",
-                progress="Queued",
-            )
-            db.add(doc)
-            db.flush()
-            doc.storage_path = str(store_original(doc.id, tmp_path, doc.filename))
-            db.commit()
-            pipeline.submit(doc.id)
-            log.info("upload: queued %s as document %s", doc.filename, doc.id)
+            log.info("upload: received %s (%d bytes, %s)", up.filename, size, up.content_type or "no content-type")
+            doc = create_document_from_file(db, tmp_path, up.filename or tmp_path.name, size)
             created.append(document_summary(doc))
         finally:
             tmp_path.unlink(missing_ok=True)
+    return created
+
+
+class ImportRequest(BaseModel):
+    paths: list[str] = Field(..., min_length=1, max_length=200)
+
+
+@router.post("/import", status_code=201)
+def import_documents(req: ImportRequest, db: Session = Depends(get_db)) -> list[dict]:
+    """Ingest files by local path - what the desktop app's Open dialog uses.
+
+    The bytes never travel through the web view: the server reads them off the
+    disk itself. Localhost-bound and single-user, so a path the user just picked
+    in a native dialog needs no more checking than "is it a file".
+    """
+    log.info("import: %d path(s): %s", len(req.paths), ", ".join(req.paths))
+    created: list[dict] = []
+    for raw in req.paths:
+        path = Path(raw).expanduser()
+        if not path.is_file():
+            log.warning("import rejected: %s is not a file", raw)
+            raise HTTPException(400, f"Not a file: {raw}")
+        doc = create_document_from_file(db, path, path.name)
+        created.append(document_summary(doc))
     return created
 
 
