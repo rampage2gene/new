@@ -27,6 +27,13 @@ computer. Tagging a commit `v0.1.0` publishes the same files on a GitHub Release
 | macOS 12+ | `MarineDocIntelligence-macos-*.zip` | unzip, drag the `.app` to Applications. First launch: right-click → Open (unsigned). Install Tesseract with `brew install tesseract`. |
 | Linux | `MarineDocIntelligence-linux.tar.gz` | extract, run `./install-desktop-entry.sh` to add it to the app menu, or run `./MarineDocIntelligence`. Needs `tesseract-ocr` and GTK/WebKit (`gir1.2-webkit2-4.1`); without WebKit the UI opens in your browser instead. |
 
+## Cutting a release
+
+In a Claude Code session on this repo, run `/release` (optionally `/release 0.2.0`).
+The skill in `.claude/skills/release/` verifies tests and a local build, bumps the
+version in every file that carries it, adds a changelog entry, tags `vX.Y.Z`,
+waits for the four CI jobs, and reports the Release URL and download files.
+
 ## Build it yourself
 
 ```bash

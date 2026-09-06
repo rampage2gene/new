@@ -8,8 +8,11 @@ on:
     branches: ["main", "claude/**"]
     tags: ["v*"]
     paths-ignore: ["docs/**", "*.md"]
-  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -55,7 +58,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgirepository1.0-dev gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libcairo2-dev pkg-config \
             tesseract-ocr tesseract-ocr-eng
-          pip install pygobject pycairo
+          pip install "pygobject<3.51" pycairo
 
       - name: Install Tesseract (Windows, bundled into the app)
         if: runner.os == 'Windows'
@@ -71,7 +74,7 @@ jobs:
         run: brew install tesseract
 
       - name: Python dependencies
-        run: pip install -r desktop/requirements.txt
+        run: pip install -r desktop/requirements.txt -r backend/requirements-dev.txt
 
       - name: Backend tests
         run: python -m pytest -q
