@@ -24,3 +24,6 @@ frontend/dist/
 .idea/
 .vscode/
 *.iml
+
+# TypeScript build cache
+frontend/tsconfig.tsbuildinfo
