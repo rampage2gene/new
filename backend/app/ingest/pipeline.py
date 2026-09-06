@@ -1,0 +1,253 @@
+"""Document processing pipeline.
+
+    upload -> identify -> read (embedded text | OCR) -> layout analysis ->
+    metadata -> entity extraction -> QC validation -> chunk + index -> ready
+"""
+from __future__ import annotations
+
+import logging
+import threading
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
+
+from sqlalchemy import delete, select
+
+from ..config import get_settings
+from ..db import session_scope
+from ..extraction.entities import extract_entities
+from ..extraction.invoices import extract_invoice
+from ..models import Block, Chunk, Document, Entity, Invoice, Page, QCFlag, DiagramAnalysis, new_id
+from ..qc.validate import validate_entities
+from ..search.index import build_chunks, index_chunks, remove_document_index
+from ..structure.layout import analyse_layout
+from ..structure.metadata import detect_metadata
+from .identify import identify_file
+from .images import read_image
+from .pdf import read_pdf
+from .types import RawPage
+
+log = logging.getLogger(__name__)
+_executor: ThreadPoolExecutor | None = None
+_lock = threading.Lock()
+
+
+def submit(document_id: str) -> None:
+    """Queue a document for processing (or process inline when configured)."""
+    global _executor
+    settings = get_settings()
+    if not settings.background_processing:
+        process_document(document_id)
+        return
+    if _executor is None:
+        _executor = ThreadPoolExecutor(max_workers=settings.ingest_workers, thread_name_prefix="ingest")
+    _executor.submit(process_document, document_id)
+
+
+def _set_progress(document_id: str, message: str, status: str | None = None) -> None:
+    with session_scope() as s:
+        doc = s.get(Document, document_id)
+        if doc:
+            doc.progress = message
+            if status:
+                doc.status = status
+
+
+def process_document(document_id: str) -> None:
+    try:
+        _set_progress(document_id, "Identifying file", "processing")
+        with session_scope() as s:
+            doc = s.get(Document, document_id)
+            if not doc:
+                return
+            path = Path(doc.storage_path)
+            filename = doc.filename
+            file_type = doc.file_type
+        pages = _read_pages(path, file_type, document_id)
+        _set_progress(document_id, "Analysing document structure")
+        structure = analyse_layout(pages)
+        meta = detect_metadata(pages, filename)
+        _set_progress(document_id, "Extracting technical entities")
+        entities = extract_entities(pages)
+        _set_progress(document_id, "Validating critical values")
+        flags = validate_entities(entities)
+        invoice = None
+        if meta.get("document_type") in ("Invoice", "Receipt"):
+            invoice = extract_invoice(pages, meta.get("manufacturer"))
+        _set_progress(document_id, "Indexing")
+        with _lock:
+            _persist(document_id, pages, structure, meta, entities, flags, invoice)
+        _set_progress(document_id, "Ready", "ready")
+    except Exception as exc:  # noqa: BLE001
+        log.error("Processing failed for %s: %s\n%s", document_id, exc, traceback.format_exc())
+        with session_scope() as s:
+            doc = s.get(Document, document_id)
+            if doc:
+                doc.status = "failed"
+                doc.error = f"{type(exc).__name__}: {exc}"
+                doc.progress = "Failed"
+
+
+def _read_pages(path: Path, file_type: str, document_id: str) -> list[RawPage]:
+    def progress(msg: str) -> None:
+        _set_progress(document_id, msg)
+
+    if file_type == "pdf":
+        return read_pdf(path, document_id, progress)
+    if file_type == "image":
+        return read_image(path, document_id, progress)
+    ident = identify_file(path)
+    if ident.file_type == "pdf":
+        return read_pdf(path, document_id, progress)
+    if ident.file_type == "image":
+        return read_image(path, document_id, progress)
+    raise ValueError("Unsupported file type; upload a PDF or an image (PNG, JPEG, TIFF, BMP, WEBP)")
+
+
+def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict, entities, flags, invoice) -> None:
+    with session_scope() as s:
+        doc = s.get(Document, document_id)
+        if not doc:
+            return
+        # Clear any previous processing output (re-processing support).
+        remove_document_index(s, document_id)
+        for model in (Page, Block, Chunk, Entity, QCFlag, Invoice, DiagramAnalysis):
+            s.execute(delete(model).where(model.document_id == document_id))
+        s.flush()
+
+        block_ids: dict[tuple[int, int], str] = {}
+        block_objs: list[Block] = []
+        for page in pages:
+            s.add(
+                Page(
+                    document_id=document_id,
+                    page_number=page.page_number,
+                    width=page.width,
+                    height=page.height,
+                    text_source=page.text_source,
+                    ocr_confidence=page.ocr_confidence,
+                    is_diagram=page.is_diagram,
+                    diagram_score=page.diagram_score,
+                    image_path=page.image_path,
+                    text=page.text,
+                    char_count=page.char_count,
+                    page_label=page.page_label,
+                )
+            )
+            for i, b in enumerate(page.blocks):
+                blk = Block(
+                    id=new_id(),
+                    document_id=document_id,
+                    page_number=page.page_number,
+                    order_index=i,
+                    block_type=b.block_type,
+                    text=b.text,
+                    x0=b.bbox[0], y0=b.bbox[1], x1=b.bbox[2], y1=b.bbox[3],
+                    section=b.section,
+                    section_level=b.section_level,
+                    source=b.source,
+                    confidence=b.confidence,
+                    words=b.words,
+                    table=b.table,
+                )
+                s.add(blk)
+                block_objs.append(blk)
+                block_ids[(page.page_number, i)] = blk.id
+        s.flush()
+
+        entity_objs: list[Entity] = []
+        for e in entities:
+            ent = Entity(
+                id=new_id(),
+                document_id=document_id,
+                page_number=e.page_number,
+                block_id=block_ids.get((e.page_number, e.block_index)),
+                entity_type=e.entity_type,
+                value=e.value,
+                unit=e.unit,
+                value_text=e.value_text,
+                raw_text=e.raw_text,
+                qualifier=e.qualifier,
+                application=e.application,
+                circuit=e.circuit,
+                equipment=e.equipment,
+                equipment_model=e.equipment_model,
+                device_type=e.device_type,
+                section=e.section,
+                snippet=e.snippet,
+                char_start=e.char_start,
+                char_end=e.char_end,
+                x0=e.bbox[0], y0=e.bbox[1], x1=e.bbox[2], y1=e.bbox[3],
+                confidence=e.confidence,
+                ocr_confidence=e.ocr_confidence,
+                is_critical=e.is_critical,
+                flags=e.flags,
+                extra=e.extra,
+            )
+            s.add(ent)
+            entity_objs.append(ent)
+        s.flush()
+        for f in flags:
+            s.add(
+                QCFlag(
+                    document_id=document_id,
+                    entity_id=entity_objs[f.entity_index].id if f.entity_index is not None else None,
+                    page_number=f.page_number,
+                    severity=f.severity,
+                    flag_type=f.flag_type,
+                    message=f.message,
+                    details=f.details,
+                )
+            )
+        chunks = build_chunks(document_id, pages, block_ids)
+        for c in chunks:
+            s.add(c)
+        s.flush()
+        index_chunks(s, chunks)
+
+        if invoice is not None:
+            s.add(
+                Invoice(
+                    document_id=document_id,
+                    vendor=invoice.vendor,
+                    invoice_number=invoice.invoice_number,
+                    invoice_date=invoice.invoice_date,
+                    currency=invoice.currency,
+                    subtotal=invoice.subtotal,
+                    tax=invoice.tax,
+                    total=invoice.total,
+                    line_items=[li.__dict__ for li in invoice.line_items],
+                    confidence=invoice.confidence,
+                )
+            )
+
+        doc.page_count = len(pages)
+        doc.ocr_pages = sum(1 for p in pages if p.text_source == "ocr")
+        doc.embedded_text_pages = sum(1 for p in pages if p.text_source == "embedded")
+        doc.title = meta.get("title")
+        doc.manufacturer = meta.get("manufacturer")
+        doc.product = meta.get("product")
+        doc.model_number = meta.get("model_number")
+        doc.document_type = meta.get("document_type")
+        doc.revision = meta.get("revision")
+        doc.publication_date = meta.get("publication_date")
+        doc.equipment_types = meta.get("equipment_types", [])
+        doc.structure = structure
+        counts: dict[str, int] = {}
+        for e in entities:
+            counts[e.entity_type] = counts.get(e.entity_type, 0) + 1
+        doc.stats = {
+            "entities": counts,
+            "qc_flags": len(flags),
+            "critical_flags": sum(1 for f in flags if f.severity == "critical"),
+            "chunks": len(chunks),
+            "blocks": len(block_objs),
+            "avg_ocr_confidence": _avg([p.ocr_confidence for p in pages if p.ocr_confidence is not None]),
+        }
+        doc.processed_at = datetime.now(timezone.utc)
+        doc.error = None
+
+
+def _avg(vals: list[float]) -> float | None:
+    return round(sum(vals) / len(vals), 3) if vals else None
