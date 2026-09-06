@@ -1,8 +1,10 @@
 """Desktop launcher: starts the API in-process and opens the UI in a native window.
 
 Works both from a source checkout (`python desktop/launcher.py`) and from the
-PyInstaller build produced by `desktop/build.py`. All user data lives in a
-per-user application directory, never inside the installation folder.
+PyInstaller build produced by `desktop/build.py`. An installed copy keeps user
+data in a per-user application directory, never inside the installation folder;
+a portable copy (one shipped with a `portable.txt` marker) keeps it in a `data`
+folder beside the executable so the whole thing travels together.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -96,6 +98,34 @@ def user_data_dir() -> Path:
         return Path.home() / "Library" / "Application Support" / APP_NAME
     base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
     return base / APP_ID
+
+
+def portable_data_dir() -> Path | None:
+    """A portable copy keeps its data (and its log) beside the executable.
+
+    The portable archive ships a `portable.txt` marker next to the exe. When it
+    is there and the folder can be written to, documents, the database and the
+    log live in `data/` alongside the program, so the app travels on a USB
+    stick and `data/logs/app.log` sits next to what was double-clicked. An
+    installed copy has no marker and is unaffected; a portable copy dropped
+    somewhere read-only falls back to the per-user folder instead of failing.
+    """
+    if not FROZEN:
+        return None
+    exe_dir = Path(sys.executable).resolve().parent
+    if not (exe_dir / "portable.txt").exists():
+        return None
+    target = exe_dir / "data"
+    try:  # os.access lies on Windows; write something instead
+        target.mkdir(parents=True, exist_ok=True)
+        probe = target / ".write-test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError:
+        # Logging is not configured yet (this decides where the log goes), and a
+        # windowed build has no stderr. `run()` logs the folder it settled on.
+        return None
+    return target
 
 
 def frontend_dist() -> Path:
@@ -248,7 +278,7 @@ def open_window(url: str, on_close) -> bool:
 
 
 def run() -> int:
-    data_dir = Path(os.environ.get("MDI_DATA_DIR") or user_data_dir())
+    data_dir = Path(os.environ.get("MDI_DATA_DIR") or portable_data_dir() or user_data_dir())
     data_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(data_dir)
     log.info("%s %s on %s (%s), frozen=%s", APP_NAME, APP_VERSION, platform.platform(), platform.machine(), FROZEN)

@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1.2 - 2026-09-06
+
+- Fixed: an upload that failed because Windows could not read the file reported
+  only "Failed to fetch". Files are now checked before the upload starts, and
+  the message names the file and the usual causes (stored online-only in
+  OneDrive, inside a zip or an email preview, still downloading, or open in
+  another program).
+- Added: a **Diagnostics** page — app version, data folder, log location, OCR
+  engine, upload limit and document counts, with the application log and
+  buttons to copy either to the clipboard.
+- Added: `GET /api/diagnostics` and `GET /api/logs`, and `max_upload_mb` on
+  `GET /api/status` so oversized files are caught before they are uploaded.
+- Added: every upload is logged server-side, so a failure can be told apart —
+  no log line means the file never left the browser.
+- Added: upload progress, and a message when a drop carries no file at all.
+- Changed: the portable download now keeps its data and log in a `data` folder
+  beside the executable instead of a per-user folder, so it is self-contained.
+  Installed copies are unaffected.
+
 ## v0.1.1 - 2026-09-06
 
 - Fixed: the Windows app closed immediately on launch. A windowed build has no

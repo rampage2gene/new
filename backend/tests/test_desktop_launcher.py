@@ -47,3 +47,39 @@ def test_server_starts_without_console_streams(launcher, data_dir, monkeypatch, 
         assert body["version"] == launcher.APP_VERSION
     finally:
         server.stop()
+
+
+def test_portable_data_dir_uses_folder_beside_the_exe(launcher, monkeypatch, tmp_path):
+    """A portable copy keeps documents and its log next to the executable."""
+    exe = tmp_path / "MarineDocIntelligence"
+    exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(launcher, "FROZEN", True)
+    monkeypatch.setattr(sys, "executable", str(exe))
+
+    assert launcher.portable_data_dir() is None, "no marker: an installed copy must be unaffected"
+
+    (tmp_path / "portable.txt").write_text("portable", encoding="utf-8")
+    assert launcher.portable_data_dir() == tmp_path / "data"
+    assert (tmp_path / "data").is_dir()
+
+
+def test_portable_data_dir_falls_back_when_not_writable(launcher, monkeypatch, tmp_path):
+    """Unzipped somewhere read-only, the app uses the per-user folder rather than failing."""
+    exe = tmp_path / "MarineDocIntelligence"
+    exe.write_text("", encoding="utf-8")
+    (tmp_path / "portable.txt").write_text("portable", encoding="utf-8")
+    monkeypatch.setattr(launcher, "FROZEN", True)
+    monkeypatch.setattr(sys, "executable", str(exe))
+
+    def boom(*args, **kwargs):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(Path, "mkdir", boom)
+    assert launcher.portable_data_dir() is None
+
+
+def test_portable_data_dir_ignored_when_not_frozen(launcher, monkeypatch, tmp_path):
+    (tmp_path / "portable.txt").write_text("portable", encoding="utf-8")
+    monkeypatch.setattr(launcher, "FROZEN", False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "python"))
+    assert launcher.portable_data_dir() is None

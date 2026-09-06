@@ -7,6 +7,7 @@ export default function LibraryPage() {
   const [docs, setDocs] = useState<DocumentSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [over, setOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -21,16 +22,21 @@ export default function LibraryPage() {
 
   const upload = async (files: FileList | File[]) => {
     const list = Array.from(files);
-    if (!list.length) return;
+    if (!list.length) {
+      setError("That drop didn't contain a file. Drag it from File Explorer, or use the “Upload documents” button.");
+      return;
+    }
     setUploading(true);
+    setProgress(null);
     setError(null);
     try {
-      await api.upload(list);
+      await api.upload(list, (loaded, total) => setProgress(total ? Math.round((loaded / total) * 100) : null));
       await refresh();
     } catch (e: any) {
       setError(e.message);
     } finally {
       setUploading(false);
+      setProgress(null);
     }
   };
 
@@ -51,7 +57,7 @@ export default function LibraryPage() {
           <a className="btn" href={api.exportWorkbookUrl()} title="One Excel file: every extracted value with a link to its page, detected tables, calculator sheets prefilled from the documents with live formulas, and invoice totals">Export workbook (.xlsx, formulas)</a>
           <a className="btn" href={api.exportEntitiesUrl("xlsx")}>Values only (.xlsx)</a>
           <Link className="btn" to="/convert">Convert files</Link>
-          <button className="btn primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "Uploading…" : "Upload documents"}</button>
+          <button className="btn primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? (progress == null ? "Uploading…" : `Uploading… ${progress}%`) : "Upload documents"}</button>
           <input ref={fileRef} type="file" multiple accept=".pdf,image/*" style={{ display: "none" }} onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>
       </div>
@@ -62,7 +68,9 @@ export default function LibraryPage() {
         onDrop={(e) => { e.preventDefault(); setOver(false); upload(e.dataTransfer.files); }}
         onClick={() => fileRef.current?.click()}
       >
-        Drop PDF or image files here, or click to choose. Scanned PDFs and photographs are OCR'd automatically.
+        {uploading
+          ? `Uploading…${progress == null ? "" : ` ${progress}%`}`
+          : "Drop PDF or image files here, or click to choose. Scanned PDFs and photographs are OCR'd automatically."}
       </div>
       {error && <div className="alert crit">{error}</div>}
       <div className="card" style={{ marginTop: 14, padding: 0 }}>

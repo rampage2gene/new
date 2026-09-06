@@ -1,6 +1,7 @@
 """Document library, viewer data and page images."""
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -20,11 +21,17 @@ from .serializers import block_dict, document_detail, document_summary, flag_dic
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
+log = logging.getLogger(__name__)
+
 
 @router.post("", status_code=201)
 async def upload_documents(files: list[UploadFile] = File(...), db: Session = Depends(get_db)) -> list[dict]:
     settings = get_settings()
     created: list[dict] = []
+    # Log every arrival. When an upload fails in the desktop app this is what
+    # separates "the browser never sent the file" (nothing here) from "the
+    # server rejected it" (a line here saying why).
+    log.info("upload: %d file(s): %s", len(files), ", ".join(f.filename or "?" for f in files))
     for up in files:
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(up.filename or "upload").suffix) as tmp:
             size = 0
@@ -36,12 +43,15 @@ async def upload_documents(files: list[UploadFile] = File(...), db: Session = De
                 if size > settings.max_upload_mb * (1 << 20):
                     tmp.close()
                     Path(tmp.name).unlink(missing_ok=True)
+                    log.warning("upload rejected: %s exceeds the %d MB limit", up.filename, settings.max_upload_mb)
                     raise HTTPException(413, f"{up.filename} exceeds the {settings.max_upload_mb} MB upload limit")
                 tmp.write(chunk)
             tmp_path = Path(tmp.name)
         try:
             ident = identify_file(tmp_path, up.filename)
+            log.info("upload: received %s (%d bytes, %s, %s)", up.filename, size, up.content_type or "no content-type", ident.file_type)
             if ident.file_type == "unknown":
+                log.warning("upload rejected: %s is not a PDF or an image (%s)", up.filename, ident.mime_type)
                 raise HTTPException(415, f"{up.filename}: unsupported file type. Upload a PDF or an image.")
             doc = Document(
                 filename=up.filename or tmp_path.name,
@@ -58,6 +68,7 @@ async def upload_documents(files: list[UploadFile] = File(...), db: Session = De
             doc.storage_path = str(store_original(doc.id, tmp_path, doc.filename))
             db.commit()
             pipeline.submit(doc.id)
+            log.info("upload: queued %s as document %s", doc.filename, doc.id)
             created.append(document_summary(doc))
         finally:
             tmp_path.unlink(missing_ok=True)

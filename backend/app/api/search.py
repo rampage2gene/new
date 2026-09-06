@@ -93,4 +93,5 @@ def status_endpoint() -> dict:
         "ai_model": s.ai_model if ai_available() else None,
         "embedding_provider": get_embedding_provider().name,
         "version": __version__,
+        "max_upload_mb": s.max_upload_mb,
     }

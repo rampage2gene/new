@@ -82,6 +82,7 @@ label.field span.lbl { display: block; font-size: 12px; color: var(--muted); mar
 .alert.info { background: var(--accent-soft); border: 1px solid #b9d5ef; color: #123f66; }
 .alert.ok { background: var(--ok-soft); border: 1px solid #a9dcc0; color: #0f5a33; }
 .empty { color: var(--muted); padding: 30px; text-align: center; }
+.log-view { max-height: 460px; overflow: auto; margin: 0; padding: 10px 12px; background: #12161c; color: #d8dee9; border-radius: 6px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
 mark { background: var(--hl); padding: 0 1px; border-radius: 2px; }

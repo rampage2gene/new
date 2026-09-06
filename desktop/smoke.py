@@ -83,6 +83,7 @@ def main() -> int:
     deadline = time.time() + 90
     status = None
     doc = None
+    diag = None
     try:
         while time.time() < deadline:
             if proc.poll() is not None:
@@ -95,6 +96,12 @@ def main() -> int:
             except Exception:
                 time.sleep(0.5)
         if status:
+            try:
+                with urllib.request.urlopen(base + "/api/diagnostics", timeout=5) as r:
+                    diag = json.loads(r.read())
+                print(f"diagnostics: log_path={diag.get('log_path')} tesseract={diag.get('tesseract_version')}")
+            except Exception as exc:
+                print(f"diagnostics failed: {type(exc).__name__}: {exc}")
             pdf = data_dir / "smoke-sample.pdf"
             make_sample_pdf(pdf)
             try:
@@ -116,6 +123,9 @@ def main() -> int:
     ok = bool(status) and "version" in status
     if not ok:
         print("FAILED: no healthy /api/status answer within 90 s")
+    elif not diag or not diag.get("log_path"):
+        ok = False
+        print("FAILED: /api/diagnostics did not answer with a log path")
     elif not doc or doc.get("status") != "ready" or (doc.get("page_count") or 0) != 2:
         ok = False
         print("FAILED: the uploaded PDF was not processed to 'ready' with 2 pages")

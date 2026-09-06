@@ -118,10 +118,15 @@ jobs:
           & $iscc "/DAppVersion=$version" desktop\windows\installer.iss
           Move-Item dist\MarineDocIntelligence-Setup.exe "${{ matrix.artifact }}-Setup.exe"
 
+      # The marker goes in after the installer is built, so only the archive
+      # carries it: a portable copy keeps its data beside the executable, an
+      # installed one uses the per-user folder.
       - name: Package (Windows, portable zip)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path dist\MarineDocIntelligence -DestinationPath "${{ matrix.artifact }}.zip"
+        run: |
+          Set-Content -Path dist\MarineDocIntelligence\portable.txt -Value "Data and logs for this copy live in the data folder next to this file."
+          Compress-Archive -Path dist\MarineDocIntelligence -DestinationPath "${{ matrix.artifact }}.zip"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
@@ -131,7 +136,9 @@ jobs:
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
-        run: tar -C dist -czf "${{ matrix.artifact }}.tar.gz" MarineDocIntelligence
+        run: |
+          echo "Data and logs for this copy live in the data folder next to this file." > dist/MarineDocIntelligence/portable.txt
+          tar -C dist -czf "${{ matrix.artifact }}.tar.gz" MarineDocIntelligence
 
       - uses: actions/upload-artifact@v4
         with:

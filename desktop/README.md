@@ -58,16 +58,34 @@ python desktop/launcher.py
 
 `MarineDocIntelligence-windows.zip` is the same Windows app without setup:
 unzip it anywhere (a USB stick works), open the folder and double-click
-`MarineDocIntelligence.exe`. Nothing is written inside that folder; documents
-and settings still go to the per-user directory below. To remove it, delete the
-folder.
+`MarineDocIntelligence.exe`.
+
+A portable copy is self-contained: documents, the search index, settings and
+`data\logs\app.log` all live in a `data` folder created beside the executable,
+so the app and its library travel together and the log is easy to find. That is
+switched on by the `portable.txt` file shipped inside the archive — delete it
+and the copy behaves like an installed one, using the per-user directory below.
+If the folder cannot be written to (unzipped into `Program Files`, or read-only
+media), the app falls back to the per-user directory rather than failing. To
+remove a portable copy, delete the folder.
 
 ## Troubleshooting
 
-- **Log file.** Every launch appends to `logs/app.log` in the data directory
-  (Windows: `%LOCALAPPDATA%\Marine Electrical Document Intelligence\logs\app.log`).
+- **Diagnostics page.** The sidebar's **Diagnostics** entry shows the version,
+  the data folder, the OCR engine and the application log, with buttons to copy
+  the log or the summary to the clipboard. Start here for anything below.
+- **"The app could not read *file*" when uploading.** The file exists but
+  Windows would not hand its contents over. Usual causes: it is stored
+  online-only in OneDrive/SharePoint (right-click → *Always keep on this
+  device*), it is being read from inside a zip or an email preview, it is still
+  downloading, or another program has it open. Copy it to a normal folder such
+  as the Desktop and try again.
+- **Log file.** Every launch appends to `logs/app.log` in the data directory —
+  `data\logs\app.log` beside the executable for a portable copy, otherwise
+  `%LOCALAPPDATA%\Marine Electrical Document Intelligence\logs\app.log`.
   When something fails, that file says why; paste its last lines into an issue
-  or a Claude Code session.
+  or a Claude Code session. Every upload is logged, so an upload that leaves no
+  line here never reached the app.
 - **"could not start" dialog.** The launcher shows the error and the log path
   when the server cannot start or a bundled file is missing. Reinstall from a
   fresh download if it mentions missing interface files.

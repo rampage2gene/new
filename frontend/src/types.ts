@@ -152,7 +152,27 @@ export interface CompareResult {
 export interface InvoiceLine { description: string; quantity: number | null; unit: string | null; unit_price: number | null; total: number | null; page: number; bbox: BBox; confidence: number }
 export interface Invoice { id: string; document_id: string; document_name: string; vendor: string | null; invoice_number: string | null; invoice_date: string | null; currency: string | null; subtotal: number | null; tax: number | null; total: number | null; line_items: InvoiceLine[]; confidence: number }
 
-export interface Status { ocr_engine: string; ai_available: boolean; ai_model: string | null; embedding_provider: string; version: string }
+export interface Status { ocr_engine: string; ai_available: boolean; ai_model: string | null; embedding_provider: string; version: string; max_upload_mb?: number }
+
+export interface DiagnosticsInfo {
+  version: string;
+  platform: string;
+  machine: string;
+  python: string;
+  frozen: boolean;
+  data_dir: string;
+  log_path: string;
+  log_exists: boolean;
+  log_size: number;
+  ocr_engine: string;
+  tesseract_path: string | null;
+  tesseract_version: string | null;
+  ai_available: boolean;
+  ai_model: string | null;
+  embedding_provider: string;
+  max_upload_mb: number;
+  documents: { total: number; ready: number; failed: number };
+}
 
 export interface Highlight { bbox: BBox; kind: "primary" | "secondary" | "entity" | "component"; label?: string; confidence?: string }
 

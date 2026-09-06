@@ -211,7 +211,18 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | `POST /compare` | `{"document_ids": [2–8 ids], "question": str \| null}` | `CompareResult` |
 | `POST /documents/{id}/pages/{n}/diagram` | `?force=true` to re-run | `DiagramAnalysis` (404 unknown page) |
 | `GET /documents/{id}/pages/{n}/diagram` | — | `DiagramAnalysis`, or 204 when the page has not been analysed |
-| `GET /status` | — | `{"ocr_engine": "tesseract"\|"none", "ai_available": bool, "ai_model": str\|null, "embedding_provider": str, "version": "0.1.0"}` |
+| `GET /status` | — | `{"ocr_engine": "tesseract"\|"none", "ai_available": bool, "ai_model": str\|null, "embedding_provider": str, "version": "0.1.2", "max_upload_mb": int}` |
+
+### Diagnostics
+
+Support surface for the desktop app, which has no console. Backs the UI's Diagnostics page.
+
+| Method & path | Request | Response |
+|---|---|---|
+| `GET /diagnostics` | — | `{version, platform, machine, python, frozen, data_dir, log_path, log_exists, log_size, ocr_engine, tesseract_path, tesseract_version, ai_available, ai_model, embedding_provider, max_upload_mb, documents: {total, ready, failed}}` |
+| `GET /logs` | `?tail=1–5000 (500)` | `text/plain` — the last `tail` lines of `<data dir>/logs/app.log`. 404 when no log file exists (a development server logs to its console instead). |
+
+Every upload is logged by the `app.api.documents` logger, so an upload failure that leaves no line in the log never reached the server.
 
 ### Calculators
 

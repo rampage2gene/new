@@ -13,10 +13,15 @@ const TARGETS: { value: Target; label: string; hint: string }[] = [
 
 function FileDrop({ files, setFiles, multiple = true, accept }: { files: File[]; setFiles: (f: File[]) => void; multiple?: boolean; accept: string }) {
   const [over, setOver] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const add = (list: FileList | null) => {
-    if (!list) return;
-    const arr = Array.from(list);
+    const arr = list ? Array.from(list) : [];
+    if (!arr.length) {
+      setNote("That drop didn't contain a file. Drag it from File Explorer, or click to choose one.");
+      return;
+    }
+    setNote(null);
     setFiles(multiple ? [...files, ...arr] : arr.slice(0, 1));
   };
   return (
@@ -31,6 +36,7 @@ function FileDrop({ files, setFiles, multiple = true, accept }: { files: File[];
         {multiple ? "Drop files here, or click to choose" : "Drop a PDF here, or click to choose"}
       </div>
       <input ref={ref} type="file" multiple={multiple} accept={accept} style={{ display: "none" }} onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
+      {note && <div className="alert warn">{note}</div>}
       {files.length > 0 && (
         <ul className="filelist">
           {files.map((f, i) => (
