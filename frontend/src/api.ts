@@ -1,7 +1,13 @@
 import type { Answer, CalcResult, CalculatorSpec, CompareResult, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, Invoice, PageData, QCFlag, SearchResponse, SpecExtraction, Status } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (e: any) {
+    // A network-level failure ("Failed to fetch"): the built-in server did not answer at all.
+    throw new Error(`Could not reach the app's built-in server (${e?.message ?? "network error"}). If this keeps happening, check logs/app.log in the app's data folder.`);
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
