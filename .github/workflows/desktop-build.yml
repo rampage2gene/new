@@ -9,6 +9,11 @@ on:
     tags: ["v*"]
     paths-ignore: ["docs/**", "*.md"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Create a GitHub Release with this tag (e.g. v0.1.0) from the selected branch; leave empty to only build"
+        required: false
+        default: ""
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -123,7 +128,9 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Runs for a pushed v* tag, or for a manual run that names a tag (the tag is
+    # then created on the selected branch's commit when the release is published).
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -135,5 +142,7 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
           files: artifacts/*
           generate_release_notes: true

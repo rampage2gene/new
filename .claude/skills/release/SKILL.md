@@ -57,6 +57,14 @@ git push origin vX.Y.Z
 Never force-push and never move an existing tag. A mistaken tag gets a new
 patch release, not a rewrite.
 
+If the tag push is refused (a remote session's git proxy may only allow the
+designated branch: `error: RPC failed; HTTP 403`), do not retry: delete the
+local tag (`git tag -d vX.Y.Z`) and instead run the workflow manually with the
+GitHub Actions tool: `actions_run_trigger` method `run_workflow`,
+`workflow_id: desktop-build.yml`, `ref: <branch>`, `inputs: {release_tag: "vX.Y.Z"}`.
+The workflow builds, then publishes the Release and creates the tag on that
+commit itself.
+
 ## 4. Watch the build
 
 Use the GitHub Actions tools (`actions_list` with `list_workflow_runs` on
