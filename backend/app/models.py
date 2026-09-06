@@ -92,6 +92,9 @@ class Page(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     char_count: Mapped[int] = mapped_column(Integer, default=0)
     page_label: Mapped[str | None] = mapped_column(String(32))  # printed page number if detected
+    ocr_engine: Mapped[str | None] = mapped_column(String(32))  # reader that produced the text
+    alt_ocr_engine: Mapped[str | None] = mapped_column(String(32))  # independent second reader
+    alt_ocr: Mapped[list | None] = mapped_column(JSON)  # its lines {"t","c","bbox"} in page coords
 
     document: Mapped[Document] = relationship(back_populates="pages")
 
@@ -180,6 +183,7 @@ class Entity(Base):
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     ocr_confidence: Mapped[float | None] = mapped_column(Float)
     is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)  # confirmed or filled in by the user
     flags: Mapped[list] = mapped_column(JSON, default=list)
     extra: Mapped[dict] = mapped_column(JSON, default=dict)
 

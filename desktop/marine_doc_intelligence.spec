@@ -21,6 +21,14 @@ binaries, hiddenimports = [], []
 for pkg in ("pymupdf", "pytesseract", "anthropic", "openpyxl", "webview"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
+# The second OCR reader: PP-OCR models (.onnx) and config/default_models.yaml
+# live inside the rapidocr package; onnxruntime carries native libraries.
+for pkg in ("rapidocr", "onnxruntime", "pyclipper", "shapely", "omegaconf", "colorlog"):
+    try:
+        d, b, h = collect_all(pkg)
+        datas += d; binaries += b; hiddenimports += h
+    except Exception as exc:  # the app still runs with Tesseract alone
+        print(f"warning: {pkg} not collected: {exc}")
 hiddenimports += collect_submodules("uvicorn") + collect_submodules("app") + [
     "sqlalchemy.dialects.sqlite", "multipart", "PIL._tkinter_finder",
 ]
@@ -56,7 +64,7 @@ if sys.platform == "darwin":
         icon=str(ICON),
         bundle_identifier="com.rampage2gene.marine-doc-intelligence",
         info_plist={
-            "CFBundleShortVersionString": "0.1.3",
+            "CFBundleShortVersionString": "0.1.4",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },

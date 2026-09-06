@@ -48,10 +48,7 @@ def read_pdf_bytes(data: bytes, ocr: bool = True) -> list[RawPage]:
                 raw.text_source = "embedded"
                 _attach_tables(page, raw)
             elif ocr:
-                ocr_blocks, conf = _ocr_page(page)
-                raw.blocks = ocr_blocks
-                raw.text_source = "ocr" if ocr_blocks else "none"
-                raw.ocr_confidence = conf
+                _ocr_page(page, raw)
             pages.append(raw)
     finally:
         doc.close()

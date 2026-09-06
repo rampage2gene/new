@@ -17,7 +17,7 @@ import pymupdf
 from PIL import Image
 
 from ..config import get_settings
-from ..ocr.engine import run_ocr
+from ..ocr.engine import run_ocr, run_ocr_readings
 from ..ocr.postprocess import normalise_technical_text
 from ..storage.files import page_image_path
 from .types import RawBlock, RawPage
@@ -84,10 +84,7 @@ def read_pdf(path: Path, document_id: str, progress=None) -> list[RawPage]:
                 # Tables from vector text.
                 _attach_tables(page, raw)
             else:
-                ocr_blocks, conf = _ocr_page(page)
-                raw.blocks = ocr_blocks
-                raw.text_source = "ocr" if ocr_blocks else "none"
-                raw.ocr_confidence = conf
+                _ocr_page(page, raw)
             pages.append(raw)
     finally:
         doc.close()
@@ -193,17 +190,47 @@ def _attach_tables(page: pymupdf.Page, raw: RawPage) -> None:
         raw.blocks = kept
 
 
-def _ocr_page(page: pymupdf.Page) -> tuple[list[RawBlock], float | None]:
+def _ocr_page(page: pymupdf.Page, raw: RawPage) -> None:
+    """Render the page for OCR and fill `raw` with the best reading (blocks)
+    and the second reader's lines (for verification)."""
     settings = get_settings()
     zoom = settings.ocr_dpi / 72.0
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
     img = _pix_to_pil(pix)
-    return ocr_image_to_blocks(img, scale=zoom)
+    ocr_image_into(img, zoom, raw)
+
+
+def ocr_image_into(img: Image.Image, scale: float, raw: RawPage) -> None:
+    """Run all readers on the image; the best becomes the page text, the next
+    is kept as the independent second reading. Coordinates: pixel / scale."""
+    readings = run_ocr_readings(img)
+    if not readings:
+        raw.blocks, raw.text_source, raw.ocr_confidence = [], "none", None
+        return
+    best = readings[0]
+    blocks, conf = _blocks_from_reading(best.blocks, scale)
+    raw.blocks = blocks
+    raw.text_source = "ocr" if blocks else "none"
+    raw.ocr_confidence = conf
+    raw.ocr_engine = best.engine
+    if len(readings) > 1:
+        alt = readings[1]
+        raw.alt_ocr_engine = alt.engine
+        raw.alt_ocr = [
+            {"t": ln.text, "c": round(ln.confidence, 3), "bbox": [v / scale for v in ln.bbox]}
+            for b in alt.blocks
+            for ln in b.lines
+            if ln.text.strip()
+        ]
 
 
 def ocr_image_to_blocks(img: Image.Image, scale: float) -> tuple[list[RawBlock], float | None]:
-    """OCR an image and return blocks in page coordinates (pixel / scale)."""
+    """OCR an image with the best reader and return blocks in page coordinates (pixel / scale)."""
     ocr_blocks, _ = run_ocr(img)
+    return _blocks_from_reading(ocr_blocks, scale)
+
+
+def _blocks_from_reading(ocr_blocks, scale: float) -> tuple[list[RawBlock], float | None]:
     blocks: list[RawBlock] = []
     confs: list[float] = []
     for ob in ocr_blocks:

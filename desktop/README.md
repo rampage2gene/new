@@ -76,16 +76,58 @@ Three ways, all ending in the same processing:
 1. **Upload documents** button - in the desktop app this opens the ordinary
    Windows/macOS Open dialog; the app then reads the files straight off the
    disk. (In a plain browser it is the browser's file picker.)
-2. **Drag and drop** onto the library.
+2. **Drag and drop** onto the window. In the desktop app the window itself
+   receives the drop and hands the app the files' paths, so this takes the
+   same route as the Open dialog and never pushes the bytes through the web
+   view. (Clicking the drop zone opens the Open dialog too.)
 3. **The inbox folder.** Copy PDFs or images into `<data dir>\inbox` - for a
    portable copy that is the `data\inbox` folder next to the executable - and
    the app picks them up within a couple of seconds. When processing finishes
-   the original moves to `inbox\done\` next to `<name>.ocr.pdf`, the same
-   pages with a searchable text layer. Anything that could not be processed
-   moves to `inbox\failed\` with a `.error.txt` saying why. Nothing to click.
+   the original moves to `inbox\done\` next to the same six files described
+   under "What comes out" below. Anything that could not be processed moves
+   to `inbox\failed\` with a `.error.txt` saying why. Nothing to click.
 
-The inbox is the one to use when the other two fail: it does not involve the
-web view at all.
+## What comes out
+
+Every processed document gets its own folder, `<data dir>\exports\<name>\`
+(`data\exports\<name>\` beside a portable copy), reachable with the **Open
+folder** button in the library:
+
+| File | What it is for |
+|---|---|
+| `<name>.ocr.pdf` | the scan with a searchable text layer: select and search text in any PDF viewer |
+| `<name>.clean.pdf` | **the one to give an AI**: text only - a table of every value with its status, then the full text of every page with corrections applied and blanks marked `[TO FILL IN]` |
+| `<name>.xlsx` | the workbook: *Technical Data* with `Verified` and `Notes` columns, a *To fill in* sheet with an empty column to complete, tables, calculators, invoices |
+| `<name>.values.csv` | every value, one row each; blanks stay blank and the notes say why |
+| `<name>.json` | pages, blocks and values with their verification, for your own database |
+| `<name>.txt` | plain text |
+
+The folder is written when processing finishes and rewritten a few seconds
+after every value you fill in or confirm, so it always holds the corrected
+versions.
+
+## How reading and checking works
+
+Scanned pages are read by **two OCR engines**, RapidOCR and Tesseract, both
+bundled and both offline. The more confident reading becomes the page text;
+the other is the second reader. Every value found on a scanned page is then
+checked:
+
+| Shown as | Meaning |
+|---|---|
+| **✓ 100%** *2 readers* | both engines read the same value at the same spot |
+| **95%** *3 reads* / *corrected* | the readers disagreed; a sharp re-read of that line broke the tie (and may have corrected the first reading - the original is kept in the notes) |
+| **—** *to fill in* | no majority: the value is left blank rather than guessed, with the readings beside it |
+| **85%** or lower *1 reader* | nobody else could read that spot; a single reading |
+| **✓ 100%** *you* | you filled it in or ticked it as verified |
+
+Blanks and single readings are collected in the document's **To fill in** tab:
+open the page, read the value, type it (or click a reading) and press Enter;
+or *Confirm as is* when the page agrees. Entries survive a re-run (↻). Optional:
+with `MDI_ANTHROPIC_API_KEY=...` in `settings.env` the remaining blanks are
+shown to the model with the page image; without a key nothing leaves the
+machine. `MDI_OCR_ENGINE=tesseract` or `rapid` in `settings.env` forces a
+single reader; Diagnostics shows which readers this copy has.
 
 ## Troubleshooting
 
@@ -116,7 +158,9 @@ web view at all.
   install the "WebView2 Runtime" from Microsoft) or WebKitGTK on Linux. The
   browser fallback is fully functional; a dialog offers a button to stop the app.
 - **Scanned pages are not OCR'd.** The footer status line shows the active OCR
-  engine; see "Tesseract discovery" below.
+  readers; see "Tesseract discovery" below. If Diagnostics says RapidOCR is
+  not available, the app still works with Tesseract alone but cannot
+  cross-check values (everything shows as *1 reader*).
 - **Windows SmartScreen.** The build is unsigned: *More info → Run anyway*.
 
 ## Where the data goes

@@ -37,6 +37,9 @@ class RawPage:
     diagram_score: float = 0.0
     is_diagram: bool = False
     page_label: str | None = None
+    ocr_engine: str | None = None  # engine that produced the page text (ocr pages)
+    alt_ocr_engine: str | None = None  # the independent second reader, when there was one
+    alt_ocr: list[dict] | None = None  # its lines: {"t": text, "c": conf, "bbox": [...]} in page coords
 
     @property
     def text(self) -> str:

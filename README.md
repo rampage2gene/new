@@ -169,6 +169,17 @@ All settings are environment variables prefixed `MDI_` (see `backend/.env.exampl
 data directory, OCR engine/DPI/languages, low-confidence threshold, Anthropic API key
 and model, optional Voyage embedding key, worker count and upload limit.
 
+Reading and checking scanned pages:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MDI_OCR_ENGINE` | `auto` | `auto` runs both readers (RapidOCR and Tesseract) on every scanned page and keeps the better reading as the page text; `rapid` or `tesseract` use one reader only; `none` skips OCR. |
+| `MDI_OCR_RETRY_BELOW` | `0.80` | Tesseract re-reads a page in black-and-white when its mean word confidence is below this. |
+| `MDI_VERIFY` | `true` | Check every value from a scanned page against the second reader; a disputed value is left blank to fill in rather than guessed. |
+| `MDI_VERIFY_AI` | `true` | When an Anthropic key is configured, show the remaining blanks to the model with the page image. Nothing leaves the machine without a key. |
+| `MDI_AI_VERIFY_MAX_PAGES` | `60` | Cost guard for that check. |
+| `MDI_AUTO_EXPORT` | `true` | Write `<data dir>/exports/<name>/` (OCR'd PDF, clean text PDF, workbook, CSV, JSON, text) for every processed document and again after each edit. |
+
 ## Limitations and roadmap
 
 * Table detection relies on ruling lines in vector PDFs; OCR'd tables are read row by row.

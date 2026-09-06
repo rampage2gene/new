@@ -35,8 +35,15 @@ export default function DiagnosticsPage() {
         ["Python", `${info.python}${info.frozen ? ", packaged build" : ", development"}`],
         ["Data folder", info.data_dir],
         ["Log file", info.log_exists ? `${info.log_path} (${formatBytes(info.log_size)})` : `${info.log_path} — not created yet`],
-        ["OCR engine", info.ocr_engine === "tesseract" ? `Tesseract — ${info.tesseract_version || "version unknown"}` : "none — scanned pages cannot be read"],
+        ["OCR readers", info.ocr_engines
+          ? (info.ocr_engines.readers.length
+              ? `${info.ocr_engines.readers.map((r) => (r === "rapidocr" ? `RapidOCR ${info.ocr_engines?.rapidocr_version || ""}`.trim() : r === "tesseract" ? `Tesseract ${info.tesseract_version || ""}`.trim() : r)).join(" + ")}`
+                + (info.ocr_engines.readers.length > 1 ? " — every scanned value is checked against a second reading" : " — only one reader: values cannot be cross-checked")
+              : "none — scanned pages cannot be read")
+          : info.ocr_engine],
+        ...(info.ocr_engines && !info.ocr_engines.rapidocr ? [["RapidOCR", `not available: ${info.ocr_engines.rapidocr_error || "unknown reason"}`] as [string, string]] : []),
         ["Tesseract path", info.tesseract_path || "not found"],
+        ["Exports folder", info.exports_dir || "—"],
         ["AI reasoning", info.ai_available ? (info.ai_model ?? "available") : "not configured (answers fall back to quoting the document)"],
         ["Embeddings", info.embedding_provider],
         ["Upload limit", `${info.max_upload_mb} MB per file`],

@@ -90,6 +90,13 @@ def inbox_roundtrip(data_dir: Path, pdf: Path, timeout: float = 240) -> Path | N
     return None
 
 
+def _exports_ok(folder: str | None) -> bool:
+    if not folder:
+        return False
+    names = {p.name for p in Path(folder).glob("*")}
+    return any(n.endswith(".xlsx") for n in names) and any(n.endswith(".clean.pdf") for n in names)
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -131,8 +138,11 @@ def main() -> int:
             make_sample_pdf(pdf)
             try:
                 doc = upload_and_process(base, pdf)
+                stats = doc.get("stats") or {}
                 print(f"document: status={doc.get('status')} pages={doc.get('page_count')} "
                       f"ocr={doc.get('ocr_pages')} error={doc.get('error')}")
+                print(f"readers: {stats.get('ocr_engines')} verification={stats.get('verification')}")
+                print(f"exports: {stats.get('export_dir')} {stats.get('export_files')}")
             except Exception as exc:
                 print(f"upload failed: {type(exc).__name__}: {exc}")
                 if proc.poll() is not None:
@@ -159,6 +169,15 @@ def main() -> int:
     elif not doc or doc.get("status") != "ready" or (doc.get("page_count") or 0) != 2:
         ok = False
         print("FAILED: the uploaded PDF was not processed to 'ready' with 2 pages")
+    elif "rapidocr" not in ((doc.get("stats") or {}).get("ocr_engines") or []):
+        ok = False
+        print("FAILED: the bundled RapidOCR reader did not read the scanned page (stats.ocr_engines)")
+    elif ((doc.get("stats") or {}).get("verification") or {}).get("reader2") != "tesseract":
+        ok = False
+        print("FAILED: the second reader (Tesseract) did not run, so values were not cross-checked")
+    elif not _exports_ok((doc.get("stats") or {}).get("export_dir")):
+        ok = False
+        print("FAILED: the exports folder is missing the workbook or the clean PDF")
     elif not inbox_out or inbox_out.stat().st_size == 0:
         ok = False
         print("FAILED: a PDF copied into the inbox folder did not come back as done/<name>.ocr.pdf")

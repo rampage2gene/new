@@ -94,9 +94,40 @@ def entity_dict(e: Entity, doc_name: str | None = None) -> dict:
         "confidence": e.confidence,
         "ocr_confidence": e.ocr_confidence,
         "is_critical": e.is_critical,
+        "verified": bool(e.verified),
+        "verification": (e.extra or {}).get("verification") or {"status": "single" if e.ocr_confidence is not None else "embedded"},
         "flags": e.flags or [],
         "extra": e.extra or {},
     }
+
+
+STATUS_LABELS = {
+    "confirmed": "confirmed",
+    "corrected": "corrected",
+    "ai_confirmed": "confirmed (AI read the page)",
+    "ai_corrected": "corrected (AI read the page)",
+    "user": "confirmed by you",
+    "to_fill": "TO FILL IN",
+    "unverified": "one reading only",
+    "single": "one reading only",
+    "embedded": "from the PDF text",
+}
+
+
+def verification_note(d: dict) -> str:
+    """One line for spreadsheets and reports: how the value was checked."""
+    v = d.get("verification") or {}
+    status = v.get("status") or ("embedded" if d.get("ocr_confidence") is None else "single")
+    parts = [STATUS_LABELS.get(status, status)]
+    if v.get("note") and status not in ("user",):
+        parts.append(v["note"])
+    readings = v.get("readings") or {}
+    seen = [r for r in readings.values() if r]
+    if status == "to_fill" and seen:
+        parts.append("read as " + " / ".join(dict.fromkeys(seen)))
+    elif status in ("corrected", "ai_corrected", "user") and v.get("original") and v["original"] != d.get("value_text"):
+        parts.append(f"was '{v['original']}'")
+    return "; ".join(parts)
 
 
 def flag_dict(f: QCFlag) -> dict:

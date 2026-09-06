@@ -101,7 +101,7 @@ def _fail(path: Path, reason: str) -> None:
 
 
 def _finish_processed(db: Session) -> None:
-    from ..exports.pdf import searchable_pdf
+    from ..exports.auto import export_document
 
     for doc_id, path in list(_pending.items()):
         doc = db.get(Document, doc_id)
@@ -112,19 +112,25 @@ def _finish_processed(db: Session) -> None:
         if doc.status == "ready":
             done = inbox_dir() / "done"
             done.mkdir(parents=True, exist_ok=True)
-            out = _unique(done / f"{path.stem}.ocr.pdf")
+            # The same set as <data>/exports/<name>/, written next to the original:
+            # <name>.ocr.pdf, <name>.clean.pdf, <name>.xlsx, <name>.values.csv, <name>.json, <name>.txt
             try:
-                out.write_bytes(searchable_pdf(db, doc))
+                files = export_document(db, doc, done)
             except Exception as exc:  # noqa: BLE001
-                log.exception("inbox: could not write %s", out)
-                _fail(path, f"processed, but the OCR'd PDF could not be written: {exc}")
+                files = []
+                log.exception("inbox: exports failed for %s", path.name)
+                reason = str(exc)
+            else:
+                reason = "the OCR'd PDF could not be written (see the log)"
+            if not any(f.name.endswith(".ocr.pdf") for f in files):
+                _fail(path, f"processed, but {reason}")
                 _pending.pop(doc_id, None)
                 continue
             if path.exists():
                 shutil.move(str(path), _unique(done / path.name))
             _sizes.pop(path, None)
             _pending.pop(doc_id, None)
-            log.info("inbox: %s done -> %s (%d pages, %d OCR'd)", path.name, out.name, doc.page_count or 0, doc.ocr_pages or 0)
+            log.info("inbox: %s done -> %d files in %s (%d pages, %d OCR'd)", path.name, len(files), done, doc.page_count or 0, doc.ocr_pages or 0)
         elif doc.status == "failed":
             if path.exists():
                 _fail(path, doc.error or "processing failed")

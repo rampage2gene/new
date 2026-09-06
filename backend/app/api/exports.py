@@ -12,11 +12,27 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import Document, Entity, Invoice
-from .serializers import entity_dict
+from .serializers import entity_dict, verification_note
 
 router = APIRouter(prefix="/api", tags=["exports"])
 
-ENTITY_COLUMNS = ["document_name", "entity_type", "value_text", "value", "unit", "qualifier", "application", "circuit", "equipment", "equipment_model", "device_type", "page", "section", "confidence", "ocr_confidence", "snippet", "flags"]
+ENTITY_COLUMNS = ["document_name", "entity_type", "value_text", "value", "unit", "qualifier", "application", "circuit", "equipment", "equipment_model", "device_type", "page", "section", "confidence", "ocr_confidence", "verified", "verification_status", "notes", "snippet", "flags"]
+
+
+def entity_rows(pairs) -> list[dict]:
+    """Entity dicts flattened for CSV/XLSX: blanks stay blank, notes say why."""
+    rows = []
+    for e, name in pairs:
+        r = entity_dict(e, name)
+        v = r.get("verification") or {}
+        r["verification_status"] = v.get("status")
+        r["notes"] = verification_note(r)
+        r["verified"] = "yes" if r.get("verified") else ""
+        if v.get("status") == "to_fill":
+            r["value"], r["value_text"], r["confidence"] = None, "", None
+        r["flags"] = "; ".join(f.get("message", "") for f in r.get("flags", []))
+        rows.append(r)
+    return rows
 LINE_COLUMNS = ["vendor", "invoice_number", "invoice_date", "currency", "description", "quantity", "unit", "unit_price", "total", "page", "document_name"]
 
 
@@ -109,9 +125,7 @@ def export_entities(format: str = Query(default="csv", pattern="^(csv|xlsx|json)
         stmt = stmt.where(Entity.document_id.in_(document_ids))
     if entity_type:
         stmt = stmt.where(Entity.entity_type.in_(entity_type))
-    rows = [entity_dict(e, d.title or d.filename) for e, d in db.execute(stmt.order_by(Entity.document_id, Entity.page_number)).all()]
-    for r in rows:
-        r["flags"] = "; ".join(f.get("message", "") for f in r.get("flags", []))
+    rows = entity_rows((e, d.title or d.filename) for e, d in db.execute(stmt.order_by(Entity.document_id, Entity.page_number)).all())
     return _tabular_response(rows, ENTITY_COLUMNS, format, "technical-data")
 
 

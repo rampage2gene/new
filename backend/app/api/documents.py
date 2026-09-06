@@ -157,6 +157,29 @@ def reprocess_document(document_id: str, db: Session = Depends(get_db)) -> dict:
     return document_summary(doc)
 
 
+@router.post("/{document_id}/export")
+def export_document_now(document_id: str, db: Session = Depends(get_db)) -> dict:
+    """Write (or rewrite) the document's exports folder right away."""
+    from ..exports.auto import export_document_by_id
+
+    doc = _get_doc(db, document_id)
+    if doc.status != "ready":
+        raise HTTPException(409, "The document has not finished processing")
+    db.commit()  # release this session's view; the export opens its own
+    folder = export_document_by_id(doc.id)
+    db.expire_all()
+    doc = _get_doc(db, document_id)
+    return {"folder": str(folder) if folder else None, "files": (doc.stats or {}).get("export_files", [])}
+
+
+@router.post("/{document_id}/verify")
+def verify_document(document_id: str, db: Session = Depends(get_db)) -> dict:
+    """Read the document again with every reader and re-run the verification
+    ladder (useful after adding an API key). Values the user confirmed or
+    filled in are kept."""
+    return reprocess_document(document_id, db)
+
+
 @router.get("/{document_id}/file")
 def get_original(document_id: str, db: Session = Depends(get_db)):
     doc = _get_doc(db, document_id)

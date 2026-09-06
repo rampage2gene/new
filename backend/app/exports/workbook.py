@@ -24,7 +24,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..api.serializers import entity_dict
+from ..api.serializers import entity_dict, verification_note
 from ..calculators import tables as T
 from ..calculators.base import CalcResult, CalculationError, Calculator, InputValue
 from ..calculators.modules import DEVICE_PROFILES, REGISTRY, get_calculator
@@ -347,8 +347,13 @@ def write_calculator_sheet(
 ENTITY_HEADERS = [
     ("Document", 28), ("Type", 14), ("Value", 10), ("Unit", 8), ("As written", 16), ("Qualifier", 12),
     ("Application", 26), ("Circuit", 8), ("Equipment", 16), ("Page", 6), ("Section", 26), ("Confidence", 11),
-    ("Flags", 30), ("Snippet", 70), ("Source", 12),
+    ("Verified", 9), ("Notes", 44), ("Flags", 30), ("Snippet", 70), ("Source", 12),
 ]
+TO_FILL_HEADERS = [
+    ("Document", 28), ("Type", 14), ("Page", 6), ("Fill in", 14), ("Read as", 30), ("Status", 22),
+    ("Application", 26), ("Section", 26), ("Snippet", 70), ("Source", 12),
+]
+OPEN_STATUSES = ("to_fill", "unverified", "single")
 
 
 def write_technical_data_sheet(wb: Workbook, db: Session, docs: list[Document], base_url: str | None) -> Worksheet:
@@ -362,20 +367,56 @@ def write_technical_data_sheet(wb: Workbook, db: Session, docs: list[Document], 
             d = entity_dict(e, name)
             row += 1
             flags = "; ".join(f.get("message", "") for f in d["flags"])
+            to_fill = (d.get("verification") or {}).get("status") == "to_fill"
             values = [
-                name, d["entity_type"], d["value"], d["unit"], d["value_text"], d["qualifier"], d["application"], d["circuit"],
-                d["equipment"], d["page"], d["section"], d["confidence"], flags, d["snippet"],
+                name, d["entity_type"], None if to_fill else d["value"], d["unit"], d["value_text"] or None, d["qualifier"], d["application"], d["circuit"],
+                d["equipment"], d["page"], d["section"], None if to_fill else d["confidence"], "yes" if d.get("verified") else None,
+                verification_note(d), flags, d["snippet"],
                 _link(base_url, doc.id, d["page"], d["bbox"], f"p. {d['page']}"),
             ]
             for c, v in enumerate(values, start=1):
                 cell = ws.cell(row=row, column=c, value=v)
                 if c == 3 and v is not None:
                     cell.font = DOC_FONT
-            ws.cell(row=row, column=14).alignment = Alignment(wrap_text=False)
+                if to_fill and c in (3, 5):
+                    cell.fill = INPUT_FILL
+            ws.cell(row=row, column=16).alignment = Alignment(wrap_text=False)
     if row > 1:
         table = Table(displayName="TechnicalData", ref=f"A1:{get_column_letter(len(ENTITY_HEADERS))}{row}")
         table.tableStyleInfo = TableStyleInfo(name="TableStyleLight9", showRowStripes=True)
         ws.add_table(table)
+    ws.freeze_panes = "A2"
+    return ws
+
+
+def write_to_fill_sheet(wb: Workbook, db: Session, docs: list[Document], base_url: str | None) -> Worksheet | None:
+    """Every value that is blank or rests on a single reading, with an empty
+    'Fill in' column to complete from the page."""
+    rows: list[list[Any]] = []
+    for doc in docs:
+        name = doc.title or doc.filename
+        ents = db.execute(select(Entity).where(Entity.document_id == doc.id).order_by(Entity.page_number, Entity.char_start)).scalars().all()
+        for e in ents:
+            d = entity_dict(e, name)
+            status = (d.get("verification") or {}).get("status") or ("embedded" if d["ocr_confidence"] is None else "single")
+            if d.get("verified") or status not in OPEN_STATUSES:
+                continue
+            readings = [r for r in ((d.get("verification") or {}).get("readings") or {}).values() if r]
+            rows.append([
+                name, d["entity_type"], d["page"], None,
+                " / ".join(dict.fromkeys(readings)) if status == "to_fill" else d["value_text"],
+                verification_note(d), d["application"], d["section"], d["snippet"],
+                _link(base_url, doc.id, d["page"], d["bbox"], f"p. {d['page']}"),
+            ])
+    if not rows:
+        return None
+    ws = wb.create_sheet("To fill in")
+    _header(ws, 1, [h for h, _ in TO_FILL_HEADERS], [w for _, w in TO_FILL_HEADERS])
+    for r_idx, values in enumerate(rows, start=2):
+        for c, v in enumerate(values, start=1):
+            cell = ws.cell(row=r_idx, column=c, value=v)
+            if c == 4:
+                cell.fill = INPUT_FILL
     ws.freeze_panes = "A2"
     return ws
 
@@ -550,7 +591,9 @@ def build_workbook(
     notes: list[str] = []
     if "data" in include:
         write_technical_data_sheet(wb, db, docs, base_url)
-        sheets.append("Technical Data - every extracted value with page link")
+        sheets.append("Technical Data - every extracted value with page link; Verified/Notes say how each was checked")
+        if write_to_fill_sheet(wb, db, docs, base_url):
+            sheets.append("To fill in - values left blank or resting on one reading; complete the green column from the page")
     if "tables" in include and write_tables_sheet(wb, docs, base_url):
         sheets.append("Tables - tables found in the documents")
     if "calculators" in include:

@@ -134,6 +134,26 @@ export const api = {
   getDocument: (id: string) => request<DocumentDetail>(`/api/documents/${id}`),
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, { method: "DELETE" }),
   reprocessDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/reprocess`, { method: "POST" }),
+  /** Read the document again with every OCR reader and re-run the checks; user edits are kept. */
+  verifyDocument: (id: string) => request<DocumentSummary>(`/api/documents/${id}/verify`, { method: "POST" }),
+  /** Rewrite the document's exports folder now (it is also rewritten after every edit). */
+  exportNow: (id: string) => request<{ folder: string | null; files: string[] }>(`/api/documents/${id}/export`, { method: "POST" }),
+  /** The human rung of the verification ladder. */
+  fillIn: (entityId: string, value_text: string) =>
+    request<Entity>(`/api/entities/${entityId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value_text }) }),
+  setVerified: (entityId: string, verified: boolean) =>
+    request<Entity>(`/api/entities/${entityId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ verified }) }),
+  /** Show a folder in Explorer/Finder through the desktop bridge; false outside the app. */
+  openFolder: async (path: string): Promise<boolean> => {
+    const bridge = (window as any).pywebview?.api;
+    if (!bridge?.open_folder) return false;
+    try {
+      return Boolean(await bridge.open_folder(path));
+    } catch {
+      return false;
+    }
+  },
+  isDesktop: (): boolean => Boolean((window as any).pywebview?.api),
   upload: async (files: File[], onProgress?: UploadProgress) => {
     await checkReadable(files);
     await checkSize(files);

@@ -51,6 +51,7 @@ def init_db() -> None:
 
     engine = get_engine()
     models.Base.metadata.create_all(engine)
+    _migrate(engine)
     with engine.begin() as conn:
         # Full-text index over chunks. FTS5 ships with the SQLite bundled in Python.
         conn.execute(
@@ -60,6 +61,26 @@ def init_db() -> None:
                 "section, body, tokenize='unicode61 remove_diacritics 2')"
             )
         )
+
+
+# Columns added after the first release. `create_all` only creates missing
+# tables, so an existing database gets them here; the DDL is SQLite's.
+_ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    ("entities", "verified", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("pages", "ocr_engine", "VARCHAR(32)"),
+    ("pages", "alt_ocr_engine", "VARCHAR(32)"),
+    ("pages", "alt_ocr", "JSON"),
+]
+
+
+def _migrate(engine) -> None:
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        for table, column, ddl in _ADDED_COLUMNS:
+            existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            if existing and column not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
 
 
 @contextmanager

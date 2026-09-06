@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.1.4 - 2026-09-07
+
+A better OCR, and every value it reads is checked by a second reader. What
+the readers cannot settle is left blank for you to fill in, never guessed.
+
+- Added: a second OCR engine, **RapidOCR** (PP-OCR models bundled in the app,
+  CPU only, no Internet). Every scanned page is read by RapidOCR and Tesseract;
+  the more confident reading becomes the page text, the other is the second
+  reader. Tesseract re-reads a page in black-and-white when it was unsure.
+- Added: **verification of every value from a scanned page.** Two readers
+  agreeing on a value is ✓ 100%. When they disagree, a sharp crop of that line
+  is read a third time; two of three settle it at 95% (and can correct the
+  first reading). No majority means the value is **left blank** with the
+  readings kept beside it. Values nobody else could read stay at their single
+  reading (≤ 85%).
+- Added: a **To fill in** tab on every document listing blanks and single
+  readings: open the page, type the value or click a reading, press Enter.
+  Confirm a value as it is with the *verified* tick (Technical Data table).
+  Your entries are kept when the document is processed again.
+- Added: an **exports folder** for every processed document
+  (`<data dir>/exports/<name>/`, `data\exports` for a portable copy): the OCR'd
+  PDF, a **clean text PDF** for an AI (values table + full text with
+  corrections applied and `[TO FILL IN]` marks), an Excel workbook (Verified
+  and Notes columns, a *To fill in* sheet), a values CSV, JSON and plain text.
+  Rewritten after every edit. **Open folder** button in the library; the inbox
+  writes the same set into `inbox\done\`.
+- Added: optional AI check of the remaining blanks when an Anthropic key is in
+  `settings.env` (off otherwise; nothing leaves the machine).
+- Fixed: **drag-and-drop onto the desktop window** now imports the dropped
+  files by path, the same route as the Open dialog, instead of pushing the
+  bytes through the web view.
+- Changed: Diagnostics lists both OCR readers and the exports folder; the
+  library shows *N to fill in* / *all values checked* per document.
+- The installer and portable archive grow by roughly 60 MB for the second
+  reader's models and runtime.
+
 ## v0.1.3 - 2026-09-06
 
 Two ways to get a document in that never pass through the browser upload, for

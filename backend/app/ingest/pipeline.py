@@ -18,6 +18,7 @@ from ..config import get_settings
 from ..db import session_scope
 from ..extraction.entities import extract_entities
 from ..extraction.invoices import extract_invoice
+from ..extraction.verify import verify_entities
 from ..models import Block, Chunk, Document, Entity, Invoice, Page, QCFlag, DiagramAnalysis, new_id
 from ..qc.validate import validate_entities
 from ..search.index import build_chunks, index_chunks, remove_document_index
@@ -70,15 +71,30 @@ def process_document(document_id: str) -> None:
         meta = detect_metadata(pages, filename)
         _set_progress(document_id, "Extracting technical entities")
         entities = extract_entities(pages)
+        verification = None
+        vflags: list = []
+        if get_settings().verify:
+            _set_progress(document_id, "Checking every value against a second reading")
+            report, vflags = verify_entities(pages, entities, source_path=str(path), file_type=file_type)
+            verification = report.as_dict()
         _set_progress(document_id, "Validating critical values")
-        flags = validate_entities(entities)
+        flags = validate_entities(entities) + vflags
         invoice = None
         if meta.get("document_type") in ("Invoice", "Receipt"):
             invoice = extract_invoice(pages, meta.get("manufacturer"))
         _set_progress(document_id, "Indexing")
         with _lock:
-            _persist(document_id, pages, structure, meta, entities, flags, invoice)
+            _persist(document_id, pages, structure, meta, entities, flags, invoice, verification)
         _set_progress(document_id, "Ready", "ready")
+        if get_settings().auto_export:
+            _set_progress(document_id, "Writing the exports folder")
+            try:
+                from ..exports.auto import export_document_by_id
+
+                export_document_by_id(document_id)
+            except Exception as exc:  # noqa: BLE001 - exports never fail a document
+                log.warning("auto export failed for %s: %s", document_id, exc)
+            _set_progress(document_id, "Ready", "ready")
     except Exception as exc:  # noqa: BLE001
         log.error("Processing failed for %s: %s\n%s", document_id, exc, traceback.format_exc())
         with session_scope() as s:
@@ -105,11 +121,28 @@ def _read_pages(path: Path, file_type: str, document_id: str) -> list[RawPage]:
     raise ValueError("Unsupported file type; upload a PDF or an image (PNG, JPEG, TIFF, BMP, WEBP)")
 
 
-def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict, entities, flags, invoice) -> None:
+def _edit_key(entity_type: str, page_number: int, x0: float, y0: float) -> tuple:
+    """Where a value sits on its page: how a user's edit finds the same value again after reprocessing."""
+    return (entity_type, page_number, round(x0 / 20), round(y0 / 20))
+
+
+def _collect_user_edits(s, document_id: str) -> dict[tuple, dict]:
+    """Values the user confirmed or filled in; they must survive a reprocess."""
+    edits: dict[tuple, dict] = {}
+    for e in s.execute(select(Entity).where(Entity.document_id == document_id, Entity.verified.is_(True))).scalars():
+        edits[_edit_key(e.entity_type, e.page_number, e.x0, e.y0)] = {
+            "value": e.value, "unit": e.unit, "value_text": e.value_text,
+            "verification": (e.extra or {}).get("verification") or {"status": "user"},
+        }
+    return edits
+
+
+def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict, entities, flags, invoice, verification: dict | None = None) -> None:
     with session_scope() as s:
         doc = s.get(Document, document_id)
         if not doc:
             return
+        user_edits = _collect_user_edits(s, document_id)
         # Clear any previous processing output (re-processing support).
         remove_document_index(s, document_id)
         for model in (Page, Block, Chunk, Entity, QCFlag, Invoice, DiagramAnalysis):
@@ -133,6 +166,9 @@ def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict
                     text=page.text,
                     char_count=page.char_count,
                     page_label=page.page_label,
+                    ocr_engine=page.ocr_engine,
+                    alt_ocr_engine=page.alt_ocr_engine,
+                    alt_ocr=page.alt_ocr,
                 )
             )
             for i, b in enumerate(page.blocks):
@@ -157,7 +193,16 @@ def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict
         s.flush()
 
         entity_objs: list[Entity] = []
-        for e in entities:
+        restored: set[int] = set()
+        for e_idx, e in enumerate(entities):
+            edit = user_edits.get(_edit_key(e.entity_type, e.page_number, e.bbox[0], e.bbox[1]))
+            if edit:
+                # The user's word beats every reading.
+                e.value, e.unit, e.value_text = edit["value"], edit["unit"], edit["value_text"]
+                e.confidence = 1.0
+                e.extra = {**e.extra, "verification": edit["verification"]}
+                e.flags = [f for f in e.flags if f.get("type") not in ("low_ocr_confidence", "reading_conflict")]
+                restored.add(e_idx)
             ent = Entity(
                 id=new_id(),
                 document_id=document_id,
@@ -182,12 +227,17 @@ def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict
                 confidence=e.confidence,
                 ocr_confidence=e.ocr_confidence,
                 is_critical=e.is_critical,
+                verified=e_idx in restored,
                 flags=e.flags,
                 extra=e.extra,
             )
             s.add(ent)
             entity_objs.append(ent)
         s.flush()
+        if restored:
+            flags = [f for f in flags if not (f.entity_index in restored and f.flag_type in ("low_ocr_confidence", "reading_conflict", "reading_unverified"))]
+            if verification:
+                verification["to_fill"] = sum(1 for e in entities if (e.extra.get("verification") or {}).get("status") == "to_fill")
         for f in flags:
             s.add(
                 QCFlag(
@@ -244,6 +294,10 @@ def _persist(document_id: str, pages: list[RawPage], structure: dict, meta: dict
             "chunks": len(chunks),
             "blocks": len(block_objs),
             "avg_ocr_confidence": _avg([p.ocr_confidence for p in pages if p.ocr_confidence is not None]),
+            "ocr_engines": sorted({p.ocr_engine for p in pages if p.ocr_engine}),
+            "verification": verification,
+            "to_fill": (verification or {}).get("to_fill", 0),
+            "verified_by_user": len(restored),
         }
         doc.processed_at = datetime.now(timezone.utc)
         doc.error = None

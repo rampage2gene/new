@@ -12,8 +12,24 @@ export default function LibraryPage() {
   const [report, setReport] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [info, setInfo] = useState<DiagnosticsInfo | null>(null);
+  const [folderNote, setFolderNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // A drop inside the desktop app is handled by the window (paths, not bytes):
+  // hold the browser's File objects briefly and only upload them if no
+  // `mdi:dropped` event follows, so a drop never silently vanishes.
+  const heldDrop = useRef<{ files: File[]; timer: number } | null>(null);
   useEffect(() => { api.diagnostics().then(setInfo).catch(() => setInfo(null)); }, []);
+  useEffect(() => {
+    const cancelHold = () => {
+      if (heldDrop.current) {
+        window.clearTimeout(heldDrop.current.timer);
+        heldDrop.current = null;
+      }
+      setUploading(false);
+    };
+    window.addEventListener("mdi:dropped", cancelHold);
+    return () => window.removeEventListener("mdi:dropped", cancelHold);
+  }, []);
 
   const refresh = useCallback(() => api.listDocuments().then(setDocs).catch((e) => setError(e.message)), []);
   useEffect(() => { refresh(); }, [refresh]);
@@ -101,6 +117,31 @@ export default function LibraryPage() {
     }
   };
 
+  const dropped = (files: FileList) => {
+    const list = Array.from(files);
+    if (!api.isDesktop() || !list.length) {
+      upload(files);
+      return;
+    }
+    if (heldDrop.current) window.clearTimeout(heldDrop.current.timer);
+    setUploading(true);
+    const timer = window.setTimeout(() => {
+      heldDrop.current = null;
+      upload(list);
+    }, 1500);
+    heldDrop.current = { files: list, timer };
+  };
+
+  const openFolder = async (d: DocumentSummary) => {
+    const dir = d.stats?.export_dir;
+    if (!dir) {
+      setFolderNote("No exports folder yet for this document. Press ↻ to process it again.");
+      return;
+    }
+    const ok = await api.openFolder(dir);
+    setFolderNote(ok ? null : `The exports are in: ${dir}`);
+  };
+
   const copyReport = async () => {
     if (!report) return;
     try {
@@ -137,18 +178,20 @@ export default function LibraryPage() {
         className={`dropzone${over ? " over" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
-        onDrop={(e) => { e.preventDefault(); setOver(false); upload(e.dataTransfer.files); }}
-        onClick={() => fileRef.current?.click()}
+        onDrop={(e) => { e.preventDefault(); setOver(false); dropped(e.dataTransfer.files); }}
+        onClick={chooseFiles}
       >
         {uploading
           ? `Uploading…${progress == null ? "" : ` ${progress}%`}`
           : "Drop PDF or image files here, or click to choose. Scanned PDFs and photographs are OCR'd automatically."}
         {!uploading && info && (
           <div className="small muted" style={{ marginTop: 6 }}>
-            No luck with drag-and-drop? Copy files into the app's inbox folder instead: <code>{info.data_dir.replace(/[\\/]$/, "")}{info.platform.toLowerCase().startsWith("windows") ? "\\" : "/"}inbox</code>. The OCR'd PDF appears in its <code>done</code> subfolder.
+            Every processed document also gets a folder in <code>{info.exports_dir || `${info.data_dir.replace(/[\\/]$/, "")}${info.platform.toLowerCase().startsWith("windows") ? "\\" : "/"}exports`}</code> with the OCR'd PDF, a clean text PDF for an AI, an Excel workbook, CSV, JSON and text.
+            No luck with drag-and-drop? Copy files into the inbox folder instead: <code>{info.data_dir.replace(/[\\/]$/, "")}{info.platform.toLowerCase().startsWith("windows") ? "\\" : "/"}inbox</code>; the same files appear in its <code>done</code> subfolder.
           </div>
         )}
       </div>
+      {folderNote && <div className="alert info">{folderNote} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setFolderNote(null)}>OK</button></div>}
       {error && (
         <div className="alert crit">
           <div>{error}</div>
@@ -185,6 +228,16 @@ export default function LibraryPage() {
                   <td>{d.page_count || "—"}{d.ocr_pages ? <div className="small muted">{d.ocr_pages} OCR</div> : null}</td>
                   <td className="small">
                     {d.stats?.entities ? Object.values(d.stats.entities).reduce((a, b) => a + b, 0) + " values" : "—"}
+                    {d.status === "ready" && (d.stats?.to_fill || d.stats?.verification?.unverified) ? (
+                      <div>
+                        <Link to={`/documents/${d.id}?tab=fill`} className="badge crit" title="Values the readers could not settle: fill them in or confirm them from the page">
+                          {(d.stats.to_fill || 0) + (d.stats.verification?.unverified || 0)} to fill in
+                        </Link>
+                      </div>
+                    ) : null}
+                    {d.status === "ready" && d.stats?.verification && !d.stats.to_fill && !d.stats.verification.unverified && d.stats.verification.checked > 0 ? (
+                      <div><span className="badge ok" title="Every scanned value was read the same way by two readers or confirmed by you">all values checked</span></div>
+                    ) : null}
                     {d.stats?.critical_flags ? <div><span className="badge crit">{d.stats.critical_flags} to verify</span></div> : null}
                   </td>
                   <td className="small muted">{d.uploaded_at ? new Date(d.uploaded_at).toLocaleString() : ""}</td>
@@ -197,6 +250,7 @@ export default function LibraryPage() {
                   <td className="row" style={{ flexWrap: "nowrap" }}>
                     {d.status === "ready" && <Link className="btn sm" to={`/documents/${d.id}`}>Open</Link>}
                     {d.status === "ready" && d.ocr_pages ? <a className="btn sm" href={api.searchablePdfUrl(d.id)} title="This document with the OCR text layer added, so the text can be selected and searched in any PDF viewer">OCR'd PDF</a> : null}
+                    {d.status === "ready" ? <button className="btn sm" onClick={() => openFolder(d)} title={d.stats?.export_dir ? `Open ${d.stats.export_dir}: OCR'd PDF, clean text PDF, workbook, CSV, JSON, text` : "The exports folder for this document"}>Open folder</button> : null}
                     <button className="btn sm" onClick={() => api.reprocessDocument(d.id).then(refresh)} title="Re-run OCR and extraction">↻</button>
                     <button className="btn sm danger" onClick={() => remove(d)}>✕</button>
                   </td>

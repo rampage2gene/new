@@ -6,11 +6,14 @@ import AssistantPanel from "../components/AssistantPanel";
 import TechnicalDataTab from "../components/TechnicalDataTab";
 import StructureTab from "../components/StructureTab";
 import QCTab from "../components/QCTab";
+import FillInTab from "../components/FillInTab";
 import DiagramTab from "../components/DiagramTab";
 import ExportMenu from "../components/ExportMenu";
 import type { BBox, DocumentDetail, Highlight } from "../types";
 
 export type Jump = (page: number, bbox?: BBox | null, kind?: Highlight["kind"], label?: string) => void;
+type Tab = "assistant" | "data" | "structure" | "fill" | "qc" | "diagram";
+const TABS: Tab[] = ["assistant", "data", "structure", "fill", "qc", "diagram"];
 
 export default function DocumentPage() {
   const { id = "" } = useParams();
@@ -19,11 +22,11 @@ export default function DocumentPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(Number(params.get("page")) || 1);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
-  const [tab, setTab] = useState<"assistant" | "data" | "structure" | "qc" | "diagram">("assistant");
+  const wanted = params.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : "assistant");
 
-  useEffect(() => {
-    api.getDocument(id).then(setDoc).catch((e) => setError(e.message));
-  }, [id]);
+  const reload = useCallback(() => api.getDocument(id).then(setDoc).catch((e) => setError(e.message)), [id]);
+  useEffect(() => { reload(); }, [reload]);
 
   useEffect(() => {
     const bb = params.get("bbox");
@@ -45,6 +48,7 @@ export default function DocumentPage() {
   const counts = useMemo(() => ({
     data: doc?.stats?.entities ? Object.values(doc.stats.entities).reduce((a, b) => a + b, 0) : 0,
     qc: doc?.stats?.qc_flags || 0,
+    fill: (doc?.stats?.to_fill || 0) + (doc?.stats?.verification?.unverified || 0),
     diagram: doc?.structure?.diagram_pages?.length || 0,
   }), [doc]);
 
@@ -71,6 +75,7 @@ export default function DocumentPage() {
             <button className={tab === "assistant" ? "active" : ""} onClick={() => setTab("assistant")}>AI Assistant</button>
             <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>Technical Data<span className="badge count">{counts.data}</span></button>
             <button className={tab === "structure" ? "active" : ""} onClick={() => setTab("structure")}>Structure</button>
+            <button className={tab === "fill" ? "active" : ""} onClick={() => setTab("fill")} title="Values the readers did not settle: fill them in or confirm them from the page">To fill in{counts.fill ? <span className={`badge count ${doc.stats.to_fill ? "crit" : "warn"}`}>{counts.fill}</span> : null}</button>
             <button className={tab === "qc" ? "active" : ""} onClick={() => setTab("qc")}>Verification{counts.qc ? <span className={`badge count ${doc.stats.critical_flags ? "crit" : "warn"}`}>{counts.qc}</span> : null}</button>
             <button className={tab === "diagram" ? "active" : ""} onClick={() => setTab("diagram")}>Diagram{counts.diagram ? <span className="badge count accent">{counts.diagram}</span> : null}</button>
           </div>
@@ -78,6 +83,7 @@ export default function DocumentPage() {
             {tab === "assistant" && <AssistantPanel doc={doc} jump={jump} />}
             {tab === "data" && <TechnicalDataTab doc={doc} jump={jump} />}
             {tab === "structure" && <StructureTab doc={doc} jump={jump} />}
+            {tab === "fill" && <FillInTab doc={doc} jump={jump} onChanged={reload} />}
             {tab === "qc" && <QCTab doc={doc} jump={jump} />}
             {tab === "diagram" && <DiagramTab doc={doc} page={page} jump={jump} setHighlights={setComponentHighlights} />}
           </div>

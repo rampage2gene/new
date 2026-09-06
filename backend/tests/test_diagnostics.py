@@ -16,7 +16,8 @@ def test_diagnostics_describes_the_installation(client, data_dir: Path):
     assert body["version"]
     assert body["data_dir"] == str(data_dir)
     assert body["log_path"] == str(data_dir / "logs" / "app.log")
-    assert body["ocr_engine"] in ("tesseract", "none")
+    assert body["ocr_engine"] in ("rapidocr", "tesseract", "none")
+    assert set(body["ocr_engines"]) >= {"tesseract", "rapidocr", "readers"}
     assert set(body["documents"]) == {"total", "ready", "failed"}
     assert body["max_upload_mb"] > 0
 

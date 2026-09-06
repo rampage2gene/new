@@ -20,7 +20,19 @@ export interface DocumentSummary {
   revision?: string | null;
   publication_date?: string | null;
   equipment_types: string[];
-  stats: { entities?: Record<string, number>; qc_flags?: number; critical_flags?: number; chunks?: number; avg_ocr_confidence?: number | null };
+  stats: {
+    entities?: Record<string, number>;
+    qc_flags?: number;
+    critical_flags?: number;
+    chunks?: number;
+    avg_ocr_confidence?: number | null;
+    ocr_engines?: string[];
+    verification?: VerificationReport | null;
+    to_fill?: number;
+    verified_by_user?: number;
+    export_dir?: string;
+    export_files?: string[];
+  };
   uploaded_at?: string | null;
   processed_at?: string | null;
 }
@@ -66,6 +78,28 @@ export interface Block {
 export interface PageData extends PageSummary { document_id: string; text: string; blocks: Block[] }
 
 export interface EntityFlag { type: string; severity?: string; message: string }
+
+/** How a value was checked: the verification ladder's verdict. */
+export type VerificationStatus =
+  | "confirmed" | "corrected" | "ai_confirmed" | "ai_corrected" | "user" | "to_fill" | "unverified" | "single" | "embedded";
+export interface Verification {
+  status: VerificationStatus;
+  note?: string;
+  readings?: Record<string, string | null>;
+  original?: string | null;
+  at?: string;
+}
+export interface VerificationReport {
+  checked: number;
+  confirmed: number;
+  corrected: number;
+  to_fill: number;
+  unverified: number;
+  reader1?: string | null;
+  reader2?: string | null;
+  ai?: string | null;
+}
+
 export interface Entity {
   id: string;
   document_id: string;
@@ -89,6 +123,8 @@ export interface Entity {
   confidence: number;
   ocr_confidence: number | null;
   is_critical: boolean;
+  verified: boolean;
+  verification: Verification;
   flags: EntityFlag[];
   extra: Record<string, unknown>;
 }
@@ -152,7 +188,9 @@ export interface CompareResult {
 export interface InvoiceLine { description: string; quantity: number | null; unit: string | null; unit_price: number | null; total: number | null; page: number; bbox: BBox; confidence: number }
 export interface Invoice { id: string; document_id: string; document_name: string; vendor: string | null; invoice_number: string | null; invoice_date: string | null; currency: string | null; subtotal: number | null; tax: number | null; total: number | null; line_items: InvoiceLine[]; confidence: number }
 
-export interface Status { ocr_engine: string; ai_available: boolean; ai_model: string | null; embedding_provider: string; version: string; max_upload_mb?: number }
+export interface Status { ocr_engine: string; ocr_readers?: string[]; ai_available: boolean; ai_model: string | null; embedding_provider: string; version: string; max_upload_mb?: number }
+
+export interface OcrEngines { configured: string; tesseract: boolean; rapidocr: boolean; rapidocr_version: string | null; rapidocr_error: string | null; readers: string[] }
 
 export interface DiagnosticsInfo {
   version: string;
@@ -165,6 +203,8 @@ export interface DiagnosticsInfo {
   log_exists: boolean;
   log_size: number;
   ocr_engine: string;
+  ocr_engines?: OcrEngines;
+  exports_dir?: string;
   tesseract_path: string | null;
   tesseract_version: string | null;
   ai_available: boolean;

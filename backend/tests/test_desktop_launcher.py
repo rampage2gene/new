@@ -116,3 +116,61 @@ def test_bridge_pick_files_cancel_is_empty(launcher, monkeypatch):
 
     monkeypatch.setitem(sys.modules, "webview", types.SimpleNamespace(OPEN_DIALOG="open", windows=[FakeWindow()]))
     assert launcher.Bridge().pick_files() == []
+
+
+def test_install_drop_handler_hands_paths_to_the_page(launcher, monkeypatch):
+    """A drop on the window becomes an `mdi:dropped` event carrying file paths."""
+    import types
+
+    class Events:
+        def __init__(self):
+            self.handlers = {}
+
+        def __getattr__(self, name):
+            return self.handlers.setdefault(name, _Slot())
+
+    class _Slot:
+        def __init__(self):
+            self.fns = []
+
+        def __iadd__(self, fn):
+            self.fns.append(fn)
+            return self
+
+    class Handler:
+        def __init__(self, callback, prevent_default=False, stop_propagation=False, debounce=0):
+            self.callback, self.prevent_default = callback, prevent_default
+
+    body = types.SimpleNamespace(events=Events())
+    window = types.SimpleNamespace(dom=types.SimpleNamespace(body=body), js=[])
+    window.evaluate_js = lambda code: window.js.append(code)
+    monkeypatch.setitem(sys.modules, "webview", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "webview.dom", types.SimpleNamespace(DOMEventHandler=Handler))
+
+    assert launcher.install_drop_handler(window) is True
+    drop = body.events.handlers["drop"].fns[0]
+    assert drop.prevent_default is True and body.events.handlers["dragover"].fns[0].prevent_default is True
+    drop.callback({"dataTransfer": {"files": [{"name": "a.pdf", "pywebviewFullPath": "C:\\Docs\\a.pdf"}, {"name": "b.pdf"}]}})
+    assert len(window.js) == 1
+    assert "mdi:dropped" in window.js[0] and json.dumps(["C:\\Docs\\a.pdf"]) in window.js[0]
+    drop.callback({"dataTransfer": {"files": []}})
+    assert json.dumps([]) in window.js[1]
+
+
+def test_install_drop_handler_without_dom_support(launcher, monkeypatch):
+    import types
+
+    monkeypatch.setitem(sys.modules, "webview", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "webview.dom", None)  # import fails
+    assert launcher.install_drop_handler(types.SimpleNamespace()) is False
+
+
+def test_bridge_open_folder(launcher, monkeypatch, tmp_path):
+    opened = []
+    monkeypatch.setattr(launcher.subprocess, "Popen", lambda args, **kw: opened.append(args))
+    monkeypatch.setattr(launcher.sys, "platform", "linux")
+    bridge = launcher.Bridge()
+    assert bridge.open_folder(str(tmp_path)) is True
+    assert opened == [["xdg-open", str(tmp_path)]]
+    assert bridge.open_folder(str(tmp_path / "missing")) is False
+    assert bridge.open_folder(str(tmp_path / "file.txt")) is False

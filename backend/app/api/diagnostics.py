@@ -47,7 +47,7 @@ def _tesseract() -> tuple[str | None, str | None]:
 @router.get("/diagnostics")
 def diagnostics(db: Session = Depends(get_db)) -> dict:
     from ..ai.client import ai_available
-    from ..ocr.engine import get_ocr_engine
+    from ..ocr.engine import engine_status, get_ocr_engine
     from ..search.semantic import get_embedding_provider
 
     s = get_settings()
@@ -65,6 +65,8 @@ def diagnostics(db: Session = Depends(get_db)) -> dict:
         "log_exists": path.exists(),
         "log_size": path.stat().st_size if path.exists() else 0,
         "ocr_engine": get_ocr_engine().name,
+        "ocr_engines": engine_status(),
+        "exports_dir": str(s.exports_dir),
         "tesseract_path": exe,
         "tesseract_version": version,
         "ai_available": ai_available(),

@@ -62,6 +62,14 @@ def _group_key(e: ExtractedEntity) -> tuple:
     return (e.entity_type, (e.application or "").lower(), (e.equipment_model or e.equipment or "").lower(), e.circuit or "")
 
 
+SETTLED = {"confirmed", "corrected", "ai_confirmed", "ai_corrected", "user"}
+
+
+def is_settled(e: ExtractedEntity) -> bool:
+    """A value that a second reading (or the user) has already confirmed."""
+    return (e.extra.get("verification") or {}).get("status") in SETTLED
+
+
 def validate_entities(entities: list[ExtractedEntity]) -> list[QCFlagData]:
     settings = get_settings()
     threshold = settings.low_confidence_threshold
@@ -70,8 +78,10 @@ def validate_entities(entities: list[ExtractedEntity]) -> list[QCFlagData]:
     for idx, e in enumerate(entities):
         if not e.is_critical:
             continue
-        # 1. OCR confidence.
-        if e.ocr_confidence is not None and e.ocr_confidence < threshold:
+        if (e.extra.get("verification") or {}).get("status") == "to_fill":
+            continue  # already blank with its own flag; nothing to validate
+        # 1. OCR confidence (skipped once a second reading confirmed the value).
+        if e.ocr_confidence is not None and e.ocr_confidence < threshold and not is_settled(e):
             alts = e.extra.get("alternatives") or []
             alt_text = f" The document may read {e.value_text} or {' / '.join(alts[:2])}." if alts else ""
             f = QCFlagData(
@@ -120,7 +130,7 @@ def validate_entities(entities: list[ExtractedEntity]) -> list[QCFlagData]:
                 continue
             for i in val_idxs:
                 e = entities[i]
-                low = e.ocr_confidence is not None and e.ocr_confidence < 0.95
+                low = e.ocr_confidence is not None and e.ocr_confidence < 0.95 and not is_settled(e)
                 qualifier_differs = e.qualifier != entities[ref_idxs[0]].qualifier
                 if qualifier_differs and not low:
                     continue  # e.g. "recommended 175 A" vs "maximum 200 A" is not a discrepancy

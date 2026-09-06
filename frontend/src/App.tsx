@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import type { Status } from "./types";
 import LibraryPage from "./pages/LibraryPage";
@@ -23,9 +23,29 @@ const NAV = [
 
 export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
+  const navigate = useNavigate();
   useEffect(() => {
     api.status().then(setStatus).catch(() => setStatus(null));
   }, []);
+  // The desktop window turns a drag-and-drop into file paths (see the
+  // launcher's drop handler) and raises this event; import them like the
+  // Open dialog does, so the file bytes never pass through the web view.
+  useEffect(() => {
+    const onDropped = async (ev: Event) => {
+      const paths = (ev as CustomEvent<string[]>).detail || [];
+      if (!paths.length) return;
+      setDropError(null);
+      try {
+        await api.importPaths(paths);
+        navigate("/library", { state: { imported: paths.length, at: Date.now() } });
+      } catch (e: any) {
+        setDropError(e?.message ?? String(e));
+      }
+    };
+    window.addEventListener("mdi:dropped", onDropped);
+    return () => window.removeEventListener("mdi:dropped", onDropped);
+  }, [navigate]);
   return (
     <div className="app">
       <aside className="sidebar">
@@ -59,6 +79,12 @@ export default function App() {
         </div>
       </aside>
       <main className="main">
+        {dropError && (
+          <div className="alert crit" style={{ margin: 12 }}>
+            The dropped files could not be imported: {dropError}
+            <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setDropError(null)}>Dismiss</button>
+          </div>
+        )}
         <Routes>
           <Route path="/" element={<Navigate to="/library" replace />} />
           <Route path="/library" element={<LibraryPage />} />

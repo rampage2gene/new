@@ -24,7 +24,7 @@ def test_workbook_has_all_sheets_and_links(client, manual_doc, invoice_doc):
     # numeric values are numbers, and the Source column links back to the page in the app
     values = [td.cell(r, 3).value for r in range(2, td.max_row + 1)]
     assert any(isinstance(v, (int, float)) for v in values)
-    links = [td.cell(r, 15).value for r in range(2, td.max_row + 1)]
+    links = [td.cell(r, 17).value for r in range(2, td.max_row + 1)]
     assert all(isinstance(l, str) and l.startswith("=HYPERLINK(") and "/documents/" in l and "page=" in l for l in links)
     assert "TechnicalData" in td.tables
     # named ranges the formulas depend on

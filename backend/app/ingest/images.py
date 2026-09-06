@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from ..storage.files import page_image_path
-from .pdf import ocr_image_to_blocks
+from .pdf import ocr_image_into
 from .types import RawPage
 
 MAX_DISPLAY = 2200
@@ -30,10 +30,7 @@ def read_image(path: Path, document_id: str, progress=None) -> list[RawPage]:
 
     if progress:
         progress("Running OCR")
-    blocks, conf = ocr_image_to_blocks(img, scale=1.0)
-    raw.blocks = blocks
-    raw.text_source = "ocr" if blocks else "none"
-    raw.ocr_confidence = conf
+    ocr_image_into(img, 1.0, raw)
     raw.images = 1
     raw.image_area_ratio = 1.0
     return [raw]

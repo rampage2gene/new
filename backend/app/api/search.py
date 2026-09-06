@@ -83,12 +83,14 @@ def diagram_get(document_id: str, page_number: int, db: Session = Depends(get_db
 @router.get("/status")
 def status_endpoint() -> dict:
     from ..ai.client import ai_available
-    from ..ocr.engine import get_ocr_engine
+    from ..ocr.engine import get_ocr_engines
     from ..search.semantic import get_embedding_provider
 
     s = get_settings()
+    readers = [e.name for e in get_ocr_engines()]
     return {
-        "ocr_engine": get_ocr_engine().name,
+        "ocr_engine": " + ".join(readers) if readers else "none",
+        "ocr_readers": readers,
         "ai_available": ai_available(),
         "ai_model": s.ai_model if ai_available() else None,
         "embedding_provider": get_embedding_provider().name,

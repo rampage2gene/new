@@ -8,10 +8,12 @@ folder beside the executable so the whole thing travels together.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -23,7 +25,7 @@ from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
-APP_VERSION = "0.1.3"
+APP_VERSION = "0.1.4"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -273,6 +275,58 @@ class Bridge:
         log.info("open dialog: %d file(s) chosen", len(chosen))
         return chosen
 
+    def open_folder(self, path: str) -> bool:
+        """Show a folder (the exports folder of a document) in the file manager."""
+        target = Path(str(path or "")).expanduser()
+        if not target.is_dir():
+            log.warning("open folder: not a folder: %s", target)
+            return False
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(str(target))  # type: ignore[attr-defined]  # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(target)])  # noqa: S603, S607
+            else:
+                subprocess.Popen(["xdg-open", str(target)])  # noqa: S603, S607
+        except Exception as exc:  # noqa: BLE001
+            log.warning("open folder failed for %s: %s", target, exc)
+            return False
+        log.info("open folder: %s", target)
+        return True
+
+
+def install_drop_handler(window) -> bool:
+    """Make a drag-and-drop onto the window deliver *file paths* to the page.
+
+    Inside the web view a drop only yields browser File objects, and reading
+    those is the one step that can fail without saying why. pywebview hands
+    Python the dropped files' full paths when a drop listener is registered
+    from Python; the page is then told the paths (a `mdi:dropped` event) and
+    imports them the same way the Open dialog does. When pywebview cannot do
+    this (old version, no DOM support) the page keeps its own drop handling.
+    """
+    try:
+        from webview.dom import DOMEventHandler
+    except Exception as exc:  # noqa: BLE001
+        log.info("drop: pywebview DOM events unavailable (%s); drops stay with the page", exc)
+        return False
+
+    def on_drop(event) -> None:
+        files = ((event or {}).get("dataTransfer") or {}).get("files") or []
+        paths = [f.get("pywebviewFullPath") for f in files if isinstance(f, dict) and f.get("pywebviewFullPath")]
+        log.info("drop: %d file(s), %d with a path", len(files), len(paths))
+        window.evaluate_js("window.dispatchEvent(new CustomEvent('mdi:dropped', {detail: %s}))" % json.dumps(paths))
+
+    try:
+        body = window.dom.body
+        body.events.dragover += DOMEventHandler(lambda _e: None, prevent_default=True)
+        body.events.drop += DOMEventHandler(on_drop, prevent_default=True)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("drop: could not register the window drop handler: %s", exc)
+        return False
+    log.info("drop: window drop handler installed")
+    return True
+
 
 def open_window(url: str, on_close) -> bool:
     """Open `url` in a native window. Returns False when no GUI backend exists."""
@@ -292,6 +346,7 @@ def open_window(url: str, on_close) -> bool:
             APP_NAME, url, width=1440, height=900, min_size=(1024, 640), text_select=True, js_api=Bridge()
         )
         window.events.closed += on_close
+        window.events.loaded += lambda *_: install_drop_handler(window)
         kwargs = {}
         icon = icon_path()
         if icon and sys.platform.startswith("linux"):

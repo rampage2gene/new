@@ -17,7 +17,9 @@ Errors use FastAPI's `{"detail": "..."}` shape. Status codes beyond 200: 201 upl
   "manufacturer": null, "product": "XYZ-5000 Inverter/Charger", "model_number": "XYZ-5000",
   "document_type": "Installation Manual", "revision": "2.1", "publication_date": "March 2024",
   "equipment_types": ["battery", "inverter", "fuse", "inverter/charger", "battery charger", "bms"],
-  "stats": {"entities": {"fuse": 2, "wire_size": 6}, "qc_flags": 1, "critical_flags": 0, "chunks": 9, "blocks": 25, "avg_ocr_confidence": null},
+  "stats": {"entities": {"fuse": 2, "wire_size": 6}, "qc_flags": 1, "critical_flags": 0, "chunks": 9, "blocks": 25, "avg_ocr_confidence": null,
+            "ocr_engines": ["rapidocr"], "verification": {"checked": 34, "confirmed": 28, "corrected": 0, "to_fill": 0, "unverified": 6, "reader1": "rapidocr", "reader2": "tesseract", "ai": null},
+            "to_fill": 0, "verified_by_user": 0, "export_dir": "…/exports/XYZ-5000 Installation Manual", "export_files": ["….ocr.pdf", "….clean.pdf", "….xlsx", "….values.csv", "….json", "….txt"]},
   "uploaded_at": "2026-09-06T04:46:53+00:00", "processed_at": "2026-09-06T04:46:54+00:00"
 }
 ```
@@ -73,12 +75,28 @@ Errors use FastAPI's `{"detail": "..."}` shape. Status codes beyond 200: 201 upl
   "snippet": "Install a 300 A Class T fuse within 180 mm of the battery positive terminal.",
   "block_id": "…", "bbox": [87.3, 99.1, 113.0, 113.4],
   "confidence": 0.95, "ocr_confidence": null, "is_critical": true,
+  "verified": false,
+  "verification": {"status": "embedded"},
   "flags": [{"type": "awg_cross_reference", "severity": "warning", "message": "…"}],
   "extra": {"qualifiers": ["required"], "in_warning": false}
 }
 ```
 
-`entity_type` ∈ `wire_size | current | fuse | breaker | voltage | power | frequency | capacity | torque | resistance | temperature | terminal_size | clearance | equipment`. `qualifier` ∈ the 17 values in SPEC §3 or null. `circuit` ∈ `dc | ac | ac/dc | control | null`. Known `extra` keys: `qualifiers`, `column`, `in_warning`, `range`, `alternatives`, `awg`, `mm2_equivalent`, `nm_equivalent`, `terminal`, `watts_equivalent`, `protection_ambiguous`, `protection_generic`, `rating`, `voltage`.
+`entity_type` ∈ `wire_size | current | fuse | breaker | voltage | power | frequency | capacity | torque | resistance | temperature | terminal_size | clearance | equipment`. `qualifier` ∈ the 17 values in SPEC §3 or null. `circuit` ∈ `dc | ac | ac/dc | control | null`. Known `extra` keys: `qualifiers`, `column`, `in_warning`, `range`, `alternatives`, `awg`, `mm2_equivalent`, `nm_equivalent`, `terminal`, `watts_equivalent`, `protection_ambiguous`, `protection_generic`, `rating`, `voltage`, `verification`.
+
+**Verification.** Every value read from a scanned page is checked against an independent second OCR reading of the same spot (RapidOCR and Tesseract both read every scanned page; the more confident reading becomes the page text, the other is the second reader). `verification.status`:
+
+| status | confidence | meaning |
+|---|---|---|
+| `confirmed` | 1.0 (`note: "2 readers"`) or 0.95 (`note: "majority of 3"`) | both readers, or two of three including a targeted re-read of the line, read the same value |
+| `corrected` | 0.95 | reader 1 was outvoted; the value was replaced, the original is in `verification.original` |
+| `to_fill` | 0.0 | the readings disagree with no majority: `value` is `null`, `value_text` is `""`, the candidates are in `verification.readings`, and a `reading_conflict` flag asks the user to fill it in |
+| `unverified` | ≤ 0.85 | nobody else could read that spot; a single reading, flagged `reading_unverified` |
+| `ai_confirmed` / `ai_corrected` | 1.0 / 0.95 | only with an Anthropic key: the model read the page image and settled a blank |
+| `user` | 1.0 | filled in or confirmed through `PATCH /entities/{id}`; `verified` is `true` |
+| `single` / `embedded` | unchanged | no second reading was attempted (verification off / text came from the PDF itself) |
+
+`verification.readings` maps `reader1`, `reader2`, `reread` (and `ai`) to what each read, e.g. `{"reader1": "300 A", "reader2": "800 A", "reread": "300 A"}`. A blank is exported as a blank everywhere (CSV, workbook, JSON, clean PDF `[TO FILL IN]`).
 
 ### QCFlag
 
@@ -88,7 +106,7 @@ Errors use FastAPI's `{"detail": "..."}` shape. Status codes beyond 200: 201 upl
  "details": {"reference": "300 A", "reference_pages": [3, 5]}, "resolved": false}
 ```
 
-`severity` ∈ `critical | warning | info`; `flag_type` ∈ `low_ocr_confidence | awg_ambiguity | unit_out_of_range | nonstandard_size | nonstandard_value | discrepancy | awg_cross_reference`.
+`severity` ∈ `critical | warning | info`; `flag_type` ∈ `low_ocr_confidence | awg_ambiguity | unit_out_of_range | nonstandard_size | nonstandard_value | discrepancy | awg_cross_reference | reading_conflict | reading_corrected | reading_unverified`. The three `reading_*` types come from the verification pass and are resolved automatically when the user fills in or confirms the value.
 
 ### SearchHit
 
@@ -187,7 +205,9 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | `GET /documents` | — | `[DocumentSummary]`, newest first |
 | `GET /documents/{id}` | — | `DocumentDetail` |
 | `DELETE /documents/{id}` | — | 204; removes rows, index entries and files |
-| `POST /documents/{id}/reprocess` | — | `DocumentSummary` (`queued`); all derived data is rebuilt |
+| `POST /documents/{id}/reprocess` | — | `DocumentSummary` (`queued`); all derived data is rebuilt. Values the user filled in or confirmed are kept (matched by type, page and position). |
+| `POST /documents/{id}/verify` | — | Same as reprocess: every reader reads the document again and the verification ladder re-runs (use after adding an API key). |
+| `POST /documents/{id}/export` | — | `{"folder": str, "files": [str]}` — writes the exports folder now. 409 while processing. The folder is also written when processing finishes and ~5 s after every edit (`MDI_AUTO_EXPORT`). |
 | `GET /documents/{id}/file` | — | original bytes with the stored MIME type and filename |
 | `GET /documents/{id}/pages` | — | `[PageSummary]` |
 | `GET /documents/{id}/pages/{n}` | `?words=true` to include word boxes | `PageSummary` + `document_id`, `text`, `blocks: [Block]` |
@@ -200,6 +220,7 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | Method & path | Request | Response |
 |---|---|---|
 | `GET /entities` | `document_ids[]`, `entity_type[]`, `q` (substring over snippet/value/application), `critical_only`, `limit` (500) | `[Entity]` ordered by document, page, offset |
+| `PATCH /entities/{id}` | `{"value_text": "125 A"}` fills in (parsed like an extraction: value, unit, normalised text; `""` clears the value back to *to fill in*); `{"verified": true\|false}` confirms as is / unticks (untick restores the machine reading) | `Entity` with `verified`, `confidence: 1.0`, `verification.status: "user"`; reading flags on it are resolved; the document's `stats.to_fill` / `stats.verified_by_user` are refreshed and its exports folder is rewritten. 404 unknown; 400 confirming a blank. |
 | `GET /documents/{id}/entities` | `entity_type[]` | `[Entity]` |
 | `GET /documents/{id}/spec-extraction` | — | `{"document": {id, name, manufacturer, model_number, document_type}, "groups": [{"key", "label", "count", "items"}], "critical_flags": n}`; group keys `equipment, electrical_ratings, wire_sizes, fuse_ratings, breaker_ratings, installation_requirements, torque_specifications, temperature_limits, warnings` (warning items are `{page, text, section, bbox}`) |
 
@@ -220,7 +241,7 @@ Support surface for the desktop app, which has no console. Backs the UI's Diagno
 
 | Method & path | Request | Response |
 |---|---|---|
-| `GET /diagnostics` | — | `{version, platform, machine, python, frozen, data_dir, log_path, log_exists, log_size, ocr_engine, tesseract_path, tesseract_version, ai_available, ai_model, embedding_provider, max_upload_mb, documents: {total, ready, failed}}` |
+| `GET /diagnostics` | — | `{version, platform, machine, python, frozen, data_dir, exports_dir, log_path, log_exists, log_size, ocr_engine, ocr_engines: {configured, tesseract, rapidocr, rapidocr_version, rapidocr_error, readers}, tesseract_path, tesseract_version, ai_available, ai_model, embedding_provider, max_upload_mb, documents: {total, ready, failed}}` |
 | `GET /logs` | `?tail=1–5000 (500)` | `text/plain` — the last `tail` lines of `<data dir>/logs/app.log`. 404 when no log file exists (a development server logs to its console instead). |
 
 Every upload is logged by the `app.api.documents` logger, so an upload failure that leaves no line in the log never reached the server.
@@ -240,7 +261,7 @@ Every upload is logged by the `app.api.documents` logger, so an upload failure t
 |---|---|---|
 | `GET /invoices` | — | `[Invoice]` |
 | `GET /documents/{id}/invoice` | — | `Invoice` (404 when the document is not an invoice) |
-| `GET /export/entities` | `format=csv\|xlsx\|json`, `document_ids[]`, `entity_type[]` | attachment `technical-data.<ext>`; columns `document_name, entity_type, value_text, value, unit, qualifier, application, circuit, equipment, equipment_model, device_type, page, section, confidence, ocr_confidence, snippet, flags` |
+| `GET /export/entities` | `format=csv\|xlsx\|json`, `document_ids[]`, `entity_type[]` | attachment `technical-data.<ext>`; columns `document_name, entity_type, value_text, value, unit, qualifier, application, circuit, equipment, equipment_model, device_type, page, section, confidence, ocr_confidence, verified, verification_status, notes, snippet, flags`; a *to fill in* value has empty `value_text`/`value`/`confidence` and the readings in `notes` |
 | `GET /export/invoices` | `format`, `document_ids[]`, `report=lines\|estimate\|costing` | attachment `invoice-lines` (`vendor, invoice_number, invoice_date, currency, description, quantity, unit, unit_price, total, page, document_name`), `project-estimate` (`description, quantity, unit, unit_price, total, vendors` + `PROJECT TOTAL` row) or `job-costing` (`vendor, invoice_number, invoice_date, currency, line_items, subtotal, tax, total, document_name` + `TOTAL` row) |
 
 ### Workbook export (live formulas)
