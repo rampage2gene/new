@@ -28,7 +28,7 @@ jobs:
           - os: macos-latest
             label: macOS (Apple Silicon)
             artifact: MarineDocIntelligence-macos-arm64
-          - os: macos-13
+          - os: macos-15-intel
             label: macOS (Intel)
             artifact: MarineDocIntelligence-macos-x64
           - os: ubuntu-22.04
