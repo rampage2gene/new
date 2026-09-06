@@ -66,6 +66,7 @@ jobs:
         run: |
           choco install tesseract --no-progress -y
           $src = "C:\Program Files\Tesseract-OCR"
+          Add-Content -Path $env:GITHUB_PATH -Value $src   # later steps (tests) need tesseract on PATH
           New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\tesseract-bundle" | Out-Null
           Copy-Item "$src\*" "$env:GITHUB_WORKSPACE\tesseract-bundle" -Recurse
 
