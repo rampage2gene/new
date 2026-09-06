@@ -6,6 +6,7 @@ else needs to be installed except Tesseract for OCR (bundled on Windows).
 
 ```
 desktop/
+  windows/installer.iss          Inno Setup script (Start menu, desktop shortcut, uninstaller)
   launcher.py                    starts the API on a free localhost port, opens a native window
   make_icon.py                   generates icons/ (PNG 16-1024, .ico, .icns, .svg)
   marine_doc_intelligence.spec   PyInstaller recipe
@@ -23,7 +24,7 @@ computer. Tagging a commit `v0.1.0` publishes the same files on a GitHub Release
 
 | Platform | File | Run |
 |---|---|---|
-| Windows 10/11 | `MarineDocIntelligence-windows.zip` | unzip, open `MarineDocIntelligence.exe`. Tesseract is included. SmartScreen will warn once because the build is unsigned: choose *More info → Run anyway*. |
+| Windows 10/11 | `MarineDocIntelligence-windows-Setup.exe` (installer) or `MarineDocIntelligence-windows.zip` (portable) | Run the installer: it installs per-user (no admin prompt) into `%LOCALAPPDATA%\Programs`, adds a Start menu entry, an optional desktop shortcut and an uninstaller. Tesseract is included. SmartScreen will warn once because the build is unsigned: choose *More info → Run anyway*. The zip is the same app without installation. |
 | macOS 12+ | `MarineDocIntelligence-macos-*.zip` | unzip, drag the `.app` to Applications. First launch: right-click → Open (unsigned). Install Tesseract with `brew install tesseract`. |
 | Linux | `MarineDocIntelligence-linux.tar.gz` | extract, run `./install-desktop-entry.sh` to add it to the app menu, or run `./MarineDocIntelligence`. Needs `tesseract-ocr` and GTK/WebKit (`gir1.2-webkit2-4.1`); without WebKit the UI opens in your browser instead. |
 

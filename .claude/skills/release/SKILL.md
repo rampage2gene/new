@@ -36,6 +36,7 @@ Update all of these to the new version string; they must agree:
 | `backend/app/main.py` | `FastAPI(... version="X.Y.Z")` |
 | `frontend/package.json` | `"version"` |
 | `desktop/marine_doc_intelligence.spec` | `CFBundleShortVersionString` |
+| `desktop/windows/installer.iss` | `#define AppVersion` default |
 | `docs/SPEC.md` | spec version line in the header and §19 if it changed |
 | `README.md` / `desktop/README.md` | any literal example tag (`v0.1.0`) |
 
@@ -74,7 +75,7 @@ Ubuntu 22.04, Tesseract via Chocolatey on Windows, Homebrew on macOS).
 When the `release` job has published, report to the user:
 
 - the Release URL: `https://github.com/<owner>/<repo>/releases/tag/vX.Y.Z`
-- the four files: `MarineDocIntelligence-windows.zip`, `MarineDocIntelligence-macos-arm64.zip`,
+- the files: `MarineDocIntelligence-windows-Setup.exe` (installer), `MarineDocIntelligence-windows.zip` (portable), `MarineDocIntelligence-macos-arm64.zip`,
   `MarineDocIntelligence-macos-x64.zip`, `MarineDocIntelligence-linux.tar.gz`
 - first-launch notes: builds are unsigned (SmartScreen "More info → Run anyway";
   macOS right-click → Open); macOS/Linux need Tesseract installed; the AI key

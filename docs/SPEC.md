@@ -200,7 +200,7 @@ Status: **I** implemented, **P** partial, **R** roadmap. "Test" names the pytest
 | DESK-1 | The application runs as a double-click desktop program with the project icon: `desktop/launcher.py` starts the API on a free localhost port, waits for `/api/status`, and opens the UI in a native web view (pywebview); closing the window stops the server. Without a native web view it falls back to the default browser. | I | frozen-build smoke run (§16.4) |
 | DESK-2 | User data (originals, renders, `index.db`, `settings.env`) lives in the per-user application directory, never in the install folder; `settings.env` supplies `MDI_*` settings to the packaged app. | I | §16.4 |
 | DESK-3 | Tesseract is discovered from `MDI_TESSERACT_CMD`, a `tesseract/` folder beside the executable, standard install paths, then `PATH`; Windows builds bundle it. | I | §16.4 |
-| DESK-4 | `desktop/build.py` produces a PyInstaller bundle (`dist/MarineDocIntelligence/` or the macOS `.app`); the "Desktop builds" workflow builds Windows, macOS (x64, arm64) and Linux artifacts on every push and attaches them to a Release on `v*` tags. | I | `.github/workflows/desktop-build.yml` |
+| DESK-4 | `desktop/build.py` produces a PyInstaller bundle (`dist/MarineDocIntelligence/` or the macOS `.app`); the "Desktop builds" workflow builds Windows, macOS (x64, arm64) and Linux artifacts on every push (Windows also as an Inno Setup per-user installer with Start menu entry and uninstaller) and attaches them to a Release on `v*` tags. | I | `.github/workflows/desktop-build.yml` |
 | DESK-5 | Icon set generated procedurally by `desktop/make_icon.py` (PNG 16–1024, `.ico`, `.icns`, `.svg`). | I | files in `desktop/icons/` |
 
 ## 5. System architecture
