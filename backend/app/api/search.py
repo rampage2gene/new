@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from .. import __version__
 from ..ai.compare import compare_documents
 from ..ai.diagrams import analyse_page
 from ..ai.qa import answer_question
@@ -91,5 +92,5 @@ def status_endpoint() -> dict:
         "ai_available": ai_available(),
         "ai_model": s.ai_model if ai_available() else None,
         "embedding_provider": get_embedding_provider().name,
-        "version": "0.1.0",
+        "version": __version__,
     }

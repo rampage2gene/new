@@ -8,20 +8,83 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import socket
 import sys
 import threading
 import time
+import traceback
 import urllib.request
 import webbrowser
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
+APP_VERSION = "0.1.1"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
 log = logging.getLogger("desktop")
+
+
+# --------------------------------------------------------------------------- logging
+LOG_FILE: Path | None = None
+
+
+def setup_logging(data_dir: Path) -> Path:
+    """Log to `<data_dir>/logs/app.log` (rotating) as well as the console.
+
+    A windowed build (PyInstaller `console=False` on Windows) has no console at
+    all: `sys.stdout` and `sys.stderr` are None there. Anything that touches
+    them, uvicorn's logging setup included, would crash the app before the
+    server starts, so both streams are pointed at the log file instead.
+    """
+    global LOG_FILE
+    log_dir = data_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    LOG_FILE = log_dir / "app.log"
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    file_handler.setFormatter(fmt)
+    root.addHandler(file_handler)
+    if sys.stdout is None or sys.stderr is None:
+        stream = open(LOG_FILE, "a", encoding="utf-8", buffering=1)  # noqa: SIM115 - lives for the process
+        if sys.stdout is None:
+            sys.stdout = stream
+        if sys.stderr is None:
+            sys.stderr = stream
+    else:
+        console = logging.StreamHandler(sys.stderr)
+        console.setFormatter(fmt)
+        root.addHandler(console)
+    return LOG_FILE
+
+
+def message_box(text: str, title: str = APP_NAME, error: bool = False) -> None:
+    """Blocking native message box on Windows; a stderr line elsewhere."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            flags = 0x10 if error else 0x40  # MB_ICONERROR / MB_ICONINFORMATION
+            ctypes.windll.user32.MessageBoxW(None, text, title, flags)
+            return
+        except Exception:  # pragma: no cover - no user32 (unlikely)
+            pass
+    if sys.stderr is not None:
+        print(f"{title}: {text}", file=sys.stderr)
+
+
+def fatal(message: str) -> int:
+    log.error(message)
+    hint = f"\n\nDetails were written to:\n{LOG_FILE}" if LOG_FILE else ""
+    message_box(f"{APP_NAME} could not start.\n\n{message}{hint}", error=True)
+    return 1
 
 
 # --------------------------------------------------------------------------- paths
@@ -129,7 +192,9 @@ class ApiServer:
 
         from app.main import app  # backend package; sys.path set in main()
 
-        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="info", workers=1)
+        # use_colors=False: uvicorn otherwise asks sys.stdout whether it is a TTY,
+        # which has no answer in a windowed build.
+        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="info", workers=1, use_colors=False)
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, name="api", daemon=True)
         self._thread.start()
@@ -182,10 +247,11 @@ def open_window(url: str, on_close) -> bool:
         return False
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+def run() -> int:
     data_dir = Path(os.environ.get("MDI_DATA_DIR") or user_data_dir())
     data_dir.mkdir(parents=True, exist_ok=True)
+    setup_logging(data_dir)
+    log.info("%s %s on %s (%s), frozen=%s", APP_NAME, APP_VERSION, platform.platform(), platform.machine(), FROZEN)
     load_user_env(data_dir)
     os.environ["MDI_DATA_DIR"] = str(data_dir)
     os.environ.setdefault("MDI_FRONTEND_DIST", str(frontend_dist()))
@@ -198,27 +264,48 @@ def main() -> int:
     if not FROZEN:
         sys.path.insert(0, str(REPO_DIR / "backend"))
     if not (frontend_dist() / "index.html").exists():
-        log.error("frontend build missing at %s (run: cd frontend && npm run build)", frontend_dist())
+        return fatal(f"The user interface files are missing at {frontend_dist()}. Reinstall the app (developers: cd frontend && npm run build).")
 
     port = int(os.environ.get("MDI_PORT") or free_port())
     server = ApiServer(port)
     server.start()
     if not server.wait_ready():
-        log.error("API did not start; see the log above")
-        return 1
+        return fatal("The built-in server did not start within 60 seconds.")
     log.info("UI at %s", server.url)
 
     done = threading.Event()
-    if not open_window(server.url, lambda: done.set()):
-        webbrowser.open(server.url)
-        print(f"\n{APP_NAME} is running at {server.url}\nPress Ctrl+C to quit.\n")
+    headless = os.environ.get("MDI_HEADLESS", "").lower() in ("1", "true", "yes")
+    if headless:
+        log.info("headless mode: no window; stop the process to quit")
         try:
             while not done.is_set():
                 time.sleep(0.5)
         except KeyboardInterrupt:
             pass
+    elif not open_window(server.url, lambda: done.set()):
+        webbrowser.open(server.url)
+        if sys.platform == "win32" and FROZEN:
+            # No console to Ctrl+C in a windowed build: give the user a button.
+            message_box(f"{APP_NAME} is running in your web browser at {server.url}\n\nClick OK to stop the app.")
+        else:
+            print(f"\n{APP_NAME} is running at {server.url}\nPress Ctrl+C to quit.\n")
+            try:
+                while not done.is_set():
+                    time.sleep(0.5)
+            except KeyboardInterrupt:
+                pass
     server.stop()
     return 0
+
+
+def main() -> int:
+    if sys.stderr is not None:  # a windowed build has no console; setup_logging() takes over
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    try:
+        return run()
+    except Exception as exc:  # anything unexpected: keep the reason, tell the user
+        log.error("unhandled error: %s\n%s", exc, traceback.format_exc())
+        return fatal(f"{type(exc).__name__}: {exc}")
 
 
 if __name__ == "__main__":

@@ -94,13 +94,28 @@ jobs:
         shell: pwsh
         run: Copy-Item "$env:GITHUB_WORKSPACE\tesseract-bundle" "dist\MarineDocIntelligence\tesseract" -Recurse
 
+      # Launch the frozen app exactly as a user would (minus the window) and wait
+      # for its API. Catches launch-time regressions the unit tests cannot see.
+      - name: Smoke-test the built app (Windows)
+        if: runner.os == 'Windows'
+        run: python desktop/smoke.py dist/MarineDocIntelligence/MarineDocIntelligence.exe
+
+      - name: Smoke-test the built app (macOS)
+        if: runner.os == 'macOS'
+        run: python desktop/smoke.py "dist/Marine Electrical Document Intelligence.app/Contents/MacOS/Marine Electrical Document Intelligence"
+
+      - name: Smoke-test the built app (Linux)
+        if: runner.os == 'Linux'
+        run: python desktop/smoke.py dist/MarineDocIntelligence/MarineDocIntelligence
+
       - name: Build installer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
-          & $iscc desktop\windows\installer.iss
+          $version = python -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('backend/app/__init__.py').read_text()).group(1))"
+          & $iscc "/DAppVersion=$version" desktop\windows\installer.iss
           Move-Item dist\MarineDocIntelligence-Setup.exe "${{ matrix.artifact }}-Setup.exe"
 
       - name: Package (Windows, portable zip)

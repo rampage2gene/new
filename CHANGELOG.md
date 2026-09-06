@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.1 - 2026-09-06
+
+- Fixed: the Windows app closed immediately on launch. A windowed build has no
+  console streams and the built-in server's logging setup crashed on them.
+- Added: a log file at `<data dir>/logs/app.log` (Windows:
+  `%LOCALAPPDATA%\Marine Electrical Document Intelligence\logs\app.log`), an
+  error dialog naming the log when the app cannot start, and a way to stop the
+  app when it falls back to the browser.
+- Added: CI launches every built app (Windows, macOS, Linux) and waits for its
+  API before packaging, so a launch regression cannot ship.
+- The Windows installer now carries the app version instead of a fixed default.
+
 ## v0.1.0 - 2026-09-06
 
 First release, built from the PR #1 branch. Desktop installers for Windows, macOS and Linux.

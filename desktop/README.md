@@ -20,7 +20,7 @@ desktop/
 Every push builds the app for Windows, macOS (Intel and Apple Silicon) and Linux
 in GitHub Actions (`.github/workflows/desktop-build.yml`). Open the **Actions**
 tab, pick the latest "Desktop builds" run and download the artifact for your
-computer. Tagging a commit `v0.1.0` publishes the same files on a GitHub Release.
+computer. Tagging a commit `v0.1.1` publishes the same files on a GitHub Release.
 
 | Platform | File | Run |
 |---|---|---|
@@ -53,6 +53,31 @@ Run from source without packaging:
 cd frontend && npm run build && cd ..
 python desktop/launcher.py
 ```
+
+## Portable use (no installer)
+
+`MarineDocIntelligence-windows.zip` is the same Windows app without setup:
+unzip it anywhere (a USB stick works), open the folder and double-click
+`MarineDocIntelligence.exe`. Nothing is written inside that folder; documents
+and settings still go to the per-user directory below. To remove it, delete the
+folder.
+
+## Troubleshooting
+
+- **Log file.** Every launch appends to `logs/app.log` in the data directory
+  (Windows: `%LOCALAPPDATA%\Marine Electrical Document Intelligence\logs\app.log`).
+  When something fails, that file says why; paste its last lines into an issue
+  or a Claude Code session.
+- **"could not start" dialog.** The launcher shows the error and the log path
+  when the server cannot start or a bundled file is missing. Reinstall from a
+  fresh download if it mentions missing interface files.
+- **The UI opened in the browser instead of its own window.** The native window
+  needs Microsoft Edge WebView2 on Windows (part of Windows 10/11; otherwise
+  install the "WebView2 Runtime" from Microsoft) or WebKitGTK on Linux. The
+  browser fallback is fully functional; a dialog offers a button to stop the app.
+- **Scanned pages are not OCR'd.** The footer status line shows the active OCR
+  engine; see "Tesseract discovery" below.
+- **Windows SmartScreen.** The build is unsigned: *More info → Run anyway*.
 
 ## Where the data goes
 
@@ -90,4 +115,6 @@ with `MDI_FRONTEND_DIST` pointing at the bundled UI, waits for `/api/status`, an
 opens the URL in a pywebview window (Edge WebView2 on Windows, WKWebView on
 macOS, WebKitGTK on Linux). Closing the window stops the server. If no native
 web view is available the default browser is used and the process stays alive
-until Ctrl+C.
+until Ctrl+C (or, in the windowed Windows build, until the "stop" dialog is
+confirmed). Setting `MDI_HEADLESS=1` skips the window entirely; CI uses this
+with `desktop/smoke.py` to launch each built app and check `/api/status`.

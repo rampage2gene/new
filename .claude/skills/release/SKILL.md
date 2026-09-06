@@ -33,8 +33,9 @@ Update all of these to the new version string; they must agree:
 
 | File | What |
 |---|---|
-| `backend/app/main.py` | `FastAPI(... version="X.Y.Z")` |
-| `frontend/package.json` | `"version"` |
+| `backend/app/__init__.py` | `__version__` (used by the API title and `/api/status`) |
+| `frontend/package.json`, `frontend/package-lock.json` (root entry) | `"version"` |
+| `desktop/launcher.py` | `APP_VERSION` (logged at startup; the launcher test checks it against the API) |
 | `desktop/marine_doc_intelligence.spec` | `CFBundleShortVersionString` |
 | `desktop/windows/installer.iss` | `#define AppVersion` default |
 | `docs/SPEC.md` | spec version line in the header and §19 if it changed |
@@ -69,7 +70,10 @@ commit itself.
 
 Use the GitHub Actions tools (`actions_list` with `list_workflow_runs` on
 `desktop-build.yml`, then `list_workflow_jobs`) until all four jobs finish.
-Typical duration is 10–15 minutes. If a job fails:
+Typical duration is 10–15 minutes. Each job has a "Smoke-test the built app"
+step that launches the frozen app headless (`desktop/smoke.py`) and waits for
+`/api/status`; its log ends with the app's own `app.log`, which is where a
+launch failure explains itself. If a job fails:
 
 - read its log (`get_job_logs`), fix the cause in the workflow or build files,
   run the affected local check, commit, and push to the branch;
