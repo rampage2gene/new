@@ -3,8 +3,9 @@
 The desktop app has no console, so when something goes wrong the only evidence
 is the rotating log the launcher writes. These two endpoints put that evidence
 behind the UI's Diagnostics page, which is a great deal easier to explain than
-"open %LOCALAPPDATA% and find app.log". Everything here is bound to localhost
-and single-user, so there is nothing to authenticate against.
+"open %LOCALAPPDATA% and find app.log". The app is single-user; a phone on the
+same Wi-Fi reaches these the same way it reaches everything else, by having
+been paired (`api/lan.py`).
 """
 from __future__ import annotations
 
@@ -73,6 +74,8 @@ def diagnostics(db: Session = Depends(get_db)) -> dict:
         "ai_model": s.ai_model if ai_available() else None,
         "embedding_provider": get_embedding_provider().name,
         "max_upload_mb": s.max_upload_mb,
+        "phone_access": bool(s.lan),
+        "phone_key_required": bool(s.access_key),
         "documents": {
             "total": sum(counts.values()),
             "ready": counts.get("ready", 0),

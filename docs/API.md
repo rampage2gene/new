@@ -201,7 +201,8 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | Method & path | Request | Response |
 |---|---|---|
 | `POST /documents` | multipart form, field `files` repeated (PDF or image) | 201 `[DocumentSummary]` with `status: "queued"`; processing starts in the background (inline when `MDI_BACKGROUND_PROCESSING=false`). 413 over `MDI_MAX_UPLOAD_MB`; 415 unknown type. |
-| `POST /documents/import` | `{"paths": [str]}` - local file paths (the desktop app's Open dialog; the server reads the files itself, nothing is uploaded) | 201 `[DocumentSummary]` as for upload. 400 when a path is not a file; 415 unknown type. |
+| `POST /documents/import` | `{"paths": [str]}` - local file paths (the desktop app's Open dialog; the server reads the files itself, nothing is uploaded) | 201 `[DocumentSummary]` as for upload. 400 when a path is not a file; 415 unknown type; **403 unless the caller is the computer running the app** - it names files on that computer's disk. |
+| `POST /documents/scan` | multipart form, field `pages` repeated (photographs of the pages of one document, in order) + optional `name` | 201 `DocumentSummary` (one document): the photos are bound into one PDF and processed as a scan. 415 when anything sent is not an image; 413 over `MDI_MAX_UPLOAD_MB` in total. Without `name` the document is called `Scan <date time>.pdf`. |
 | `GET /documents` | — | `[DocumentSummary]`, newest first |
 | `GET /documents/{id}` | — | `DocumentDetail` |
 | `DELETE /documents/{id}` | — | 204; removes rows, index entries and files |
@@ -235,13 +236,23 @@ Row keys: `nominal_voltage, max_continuous_current, peak_current, charge_current
 | `GET /documents/{id}/pages/{n}/diagram` | — | `DiagramAnalysis`, or 204 when the page has not been analysed |
 | `GET /status` | — | `{"ocr_engine": "tesseract"\|"none", "ai_available": bool, "ai_model": str\|null, "embedding_provider": str, "version": "0.1.3", "max_upload_mb": int}` |
 
+### Phone access
+
+The desktop app serves the UI on the local network (`MDI_LAN`, default on) so a phone on the same Wi-Fi can use it. When a pairing key is configured (`MDI_ACCESS_KEY`; the launcher writes one to `<data dir>/phone-key.txt`), **every `/api/` request from a non-loopback client must carry it** as an `X-MDI-Key` header or the `mdi_key` cookie, or it is refused with 401 and a message telling the user to scan the QR code. Exempt: loopback clients, `POST /pair`, and everything outside `/api/` — the page and its assets have to load before a phone can pair. With no key configured the API is open, as it is for the development server and the Docker image.
+
+| Method & path | Request | Response |
+|---|---|---|
+| `GET /lan` | — | `{enabled, protected, computer, port, urls: [str]}` — `urls` are `http://<private IPv4>:<port>/?key=<pairing key>`, the address the phone opens. **403 from anything but the computer itself**: the key must not be readable from the network it protects. |
+| `GET /lan/qr.png` | — | `image/png` QR code of the first URL. 403 as above; 404 when the computer has no private IPv4 address; 503 when the `qrcode` package is missing. |
+| `POST /pair` | `{"key": str}` | `{"paired": true, "protected": bool}` and sets the `mdi_key` cookie (HttpOnly, 30 days) so plain links and downloads work. 401 for a wrong key. Never guarded, from anywhere. |
+
 ### Diagnostics
 
 Support surface for the desktop app, which has no console. Backs the UI's Diagnostics page.
 
 | Method & path | Request | Response |
 |---|---|---|
-| `GET /diagnostics` | — | `{version, platform, machine, python, frozen, data_dir, exports_dir, log_path, log_exists, log_size, ocr_engine, ocr_engines: {configured, tesseract, rapidocr, rapidocr_version, rapidocr_error, readers}, tesseract_path, tesseract_version, ai_available, ai_model, embedding_provider, max_upload_mb, documents: {total, ready, failed}}` |
+| `GET /diagnostics` | — | `{version, platform, machine, python, frozen, data_dir, exports_dir, log_path, log_exists, log_size, ocr_engine, ocr_engines: {configured, tesseract, rapidocr, rapidocr_version, rapidocr_error, readers}, tesseract_path, tesseract_version, ai_available, ai_model, embedding_provider, max_upload_mb, phone_access, phone_key_required, documents: {total, ready, failed}}` |
 | `GET /logs` | `?tail=1–5000 (500)` | `text/plain` — the last `tail` lines of `<data dir>/logs/app.log`. 404 when no log file exists (a development server logs to its console instead). |
 
 Every upload is logged by the `app.api.documents` logger, so an upload failure that leaves no line in the log never reached the server.

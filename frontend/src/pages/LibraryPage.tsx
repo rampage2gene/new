@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, formatBytes } from "../api";
+import { api, formatBytes, isPhone } from "../api";
 import type { DiagnosticsInfo, DocumentSummary } from "../types";
 
+/** A photographed page, waiting to be sent with the rest of the document. */
+type Shot = { file: File; url: string };
+
+/** Offer the camera where there is one: the phone, or any touch screen. */
+const CAN_SCAN = isPhone() || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0);
+
 export default function LibraryPage() {
+  const [shots, setShots] = useState<Shot[]>([]);
+  const [scanName, setScanName] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<DocumentSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -132,6 +142,39 @@ export default function LibraryPage() {
     heldDrop.current = { files: list, timer };
   };
 
+  /* ---- photographing a document with the phone camera ---- */
+  const addShots = (files: FileList | null) => {
+    if (!files?.length) return;
+    setShots((prev) => [...prev, ...Array.from(files).map((file) => ({ file, url: URL.createObjectURL(file) }))]);
+    if (cameraRef.current) cameraRef.current.value = ""; // so the next shot fires onChange too
+  };
+
+  const dropShot = (index: number) =>
+    setShots((prev) => {
+      URL.revokeObjectURL(prev[index].url);
+      return prev.filter((_, i) => i !== index);
+    });
+
+  const sendShots = async () => {
+    if (!shots.length) return;
+    setScanning(true);
+    setError(null);
+    setReport(null);
+    setProgress(null);
+    try {
+      await api.scanPages(shots.map((s) => s.file), scanName, (loaded, total) => setProgress(total ? Math.round((loaded / total) * 100) : null));
+      shots.forEach((s) => URL.revokeObjectURL(s.url));
+      setShots([]);
+      setScanName("");
+      await refresh();
+    } catch (e: any) {
+      fail(e, `sending ${shots.length} photographed page(s)`);
+    } finally {
+      setScanning(false);
+      setProgress(null);
+    }
+  };
+
   const openFolder = async (d: DocumentSummary) => {
     const dir = d.stats?.export_dir;
     if (!dir) {
@@ -170,10 +213,42 @@ export default function LibraryPage() {
           <a className="btn" href={api.exportWorkbookUrl()} title="One Excel file: every extracted value with a link to its page, detected tables, calculator sheets prefilled from the documents with live formulas, and invoice totals">Export workbook (.xlsx, formulas)</a>
           <a className="btn" href={api.exportEntitiesUrl("xlsx")}>Values only (.xlsx)</a>
           <Link className="btn" to="/convert">Convert files</Link>
+          {CAN_SCAN && (
+            <button className="btn" onClick={() => cameraRef.current?.click()} disabled={scanning} title="Photograph the pages one by one; they become a single document">
+              Scan with the camera
+            </button>
+          )}
           <button className="btn primary" onClick={chooseFiles} disabled={uploading}>{uploading ? (progress == null ? "Uploading…" : `Uploading… ${progress}%`) : "Upload documents"}</button>
           <input ref={fileRef} type="file" multiple accept=".pdf,image/*" style={{ display: "none" }} onChange={(e) => e.target.files && upload(e.target.files)} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => addShots(e.target.files)} />
         </div>
       </div>
+      {shots.length > 0 && (
+        <div className="card">
+          <h2>{shots.length} photographed page{shots.length === 1 ? "" : "s"}</h2>
+          <p className="small muted">Take one shot per page, in order. They are bound into one document and read like any other scan.</p>
+          <div className="scan-strip">
+            {shots.map((s, i) => (
+              <div className="scan-shot" key={s.url}>
+                <img src={s.url} alt={`Page ${i + 1}`} />
+                <span className="n">{i + 1}</span>
+                <button className="x" onClick={() => dropShot(i)} title="Remove this page" aria-label={`Remove page ${i + 1}`}>✕</button>
+              </div>
+            ))}
+          </div>
+          <label className="field">
+            <span className="lbl">Name (optional)</span>
+            <input type="text" value={scanName} placeholder="e.g. Victron MultiPlus manual" onChange={(e) => setScanName(e.target.value)} />
+          </label>
+          <div className="row">
+            <button className="btn" onClick={() => cameraRef.current?.click()} disabled={scanning}>Add another page</button>
+            <button className="btn primary" onClick={sendShots} disabled={scanning}>
+              {scanning ? (progress == null ? "Sending…" : `Sending… ${progress}%`) : `Process ${shots.length} page${shots.length === 1 ? "" : "s"}`}
+            </button>
+            <button className="btn" onClick={() => { shots.forEach((s) => URL.revokeObjectURL(s.url)); setShots([]); }} disabled={scanning}>Discard</button>
+          </div>
+        </div>
+      )}
       <div
         className={`dropzone${over ? " over" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
@@ -211,9 +286,10 @@ export default function LibraryPage() {
         {docs.length === 0 ? (
           <div className="empty">No documents yet. Upload an installation manual to get started.</div>
         ) : (
+          <div className="table-scroll">
           <table className="doc-table">
             <thead>
-              <tr><th>Document</th><th>Manufacturer</th><th>Equipment</th><th>Type</th><th>Pages</th><th>Extracted</th><th>Uploaded</th><th>Status</th><th></th></tr>
+              <tr><th>Document</th><th className="hide-sm">Manufacturer</th><th className="hide-sm">Equipment</th><th className="hide-sm">Type</th><th>Pages</th><th>Extracted</th><th className="hide-sm">Uploaded</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
               {docs.map((d) => (
@@ -222,9 +298,9 @@ export default function LibraryPage() {
                     <div className="title">{d.status === "ready" ? <Link to={`/documents/${d.id}`}>{d.title}</Link> : d.title}</div>
                     <div className="small muted">{d.filename} · {formatBytes(d.size_bytes)}{d.model_number ? ` · model ${d.model_number}` : ""}{d.revision ? ` · rev ${d.revision}` : ""}</div>
                   </td>
-                  <td>{d.manufacturer || <span className="muted">—</span>}</td>
-                  <td className="small">{d.equipment_types.slice(0, 4).join(", ") || <span className="muted">—</span>}</td>
-                  <td>{d.document_type || "—"}</td>
+                  <td className="hide-sm">{d.manufacturer || <span className="muted">—</span>}</td>
+                  <td className="small hide-sm">{d.equipment_types.slice(0, 4).join(", ") || <span className="muted">—</span>}</td>
+                  <td className="hide-sm">{d.document_type || "—"}</td>
                   <td>{d.page_count || "—"}{d.ocr_pages ? <div className="small muted">{d.ocr_pages} OCR</div> : null}</td>
                   <td className="small">
                     {d.stats?.entities ? Object.values(d.stats.entities).reduce((a, b) => a + b, 0) + " values" : "—"}
@@ -240,7 +316,7 @@ export default function LibraryPage() {
                     ) : null}
                     {d.stats?.critical_flags ? <div><span className="badge crit">{d.stats.critical_flags} to verify</span></div> : null}
                   </td>
-                  <td className="small muted">{d.uploaded_at ? new Date(d.uploaded_at).toLocaleString() : ""}</td>
+                  <td className="small muted hide-sm">{d.uploaded_at ? new Date(d.uploaded_at).toLocaleString() : ""}</td>
                   <td>
                     {d.status === "ready" && <span className="badge ok">ready</span>}
                     {d.status === "failed" && <span className="badge crit" title={d.error || ""}>failed</span>}
@@ -258,6 +334,7 @@ export default function LibraryPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

@@ -1,4 +1,59 @@
-import type { Answer, CalcResult, CalculatorSpec, CompareResult, DiagnosticsInfo as Diagnostics, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, Invoice, PageData, QCFlag, SearchResponse, SpecExtraction, Status } from "./types";
+import type { Answer, CalcResult, CalculatorSpec, CompareResult, DiagnosticsInfo as Diagnostics, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, Invoice, LanInfo, PageData, QCFlag, SearchResponse, SpecExtraction, Status } from "./types";
+
+/* ------------------------------------------------------------------ pairing
+ * The desktop app also serves the UI on the local network so a phone on the
+ * same Wi-Fi can open it, and asks anything that is not the computer itself
+ * for a pairing key. The phone arrives with the key in the address (it scanned
+ * the QR code): it is kept here, sent as a header, and swapped once for a
+ * cookie so plain links and downloads work too. On the PC there is no key and
+ * none of this has any effect. */
+const KEY_STORE = "mdi.phone.key";
+const KEY_HEADER = "X-MDI-Key";
+
+let accessKey: string | null = readStoredKey();
+
+function readStoredKey(): string | null {
+  try {
+    return localStorage.getItem(KEY_STORE);
+  } catch {
+    return null; // private browsing
+  }
+}
+
+function withKey(init?: RequestInit): RequestInit | undefined {
+  if (!accessKey) return init;
+  const headers = new Headers(init?.headers ?? {});
+  headers.set(KEY_HEADER, accessKey);
+  return { ...init, headers };
+}
+
+/** Called once before the app renders. */
+export async function pairThisDevice(): Promise<void> {
+  const url = new URL(window.location.href);
+  const scanned = url.searchParams.get("key");
+  if (scanned) {
+    accessKey = scanned;
+    try {
+      localStorage.setItem(KEY_STORE, scanned);
+    } catch {
+      /* the header still works for this session */
+    }
+    url.searchParams.delete("key"); // keep it out of the address bar and any bookmark
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  }
+  if (!accessKey) return;
+  try {
+    await fetch("/api/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: accessKey }) });
+  } catch {
+    /* the server will be asked again with the header on the first real request */
+  }
+}
+
+/** True when this browser is not the one on the computer running the app. */
+export function isPhone(): boolean {
+  const h = window.location.hostname;
+  return !(h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1" || h === "");
+}
 
 /** Why a file the user picked cannot be sent. Worth spelling out: the browser
  *  reports every one of these causes as the same bare "Failed to fetch". */
@@ -53,7 +108,7 @@ async function checkSize(files: File[]): Promise<void> {
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await fetch(url, withKey(init));
   } catch (e: any) {
     // A network-level failure ("Failed to fetch"): the request never completed.
     throw new Error(`${NETWORK_FAILED} (${e?.message ?? "network error"})`);
@@ -82,6 +137,7 @@ function xhrUpload<T>(url: string, fd: FormData, onProgress?: UploadProgress): P
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
+    if (accessKey) xhr.setRequestHeader(KEY_HEADER, accessKey);
     if (onProgress) {
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
     }
@@ -114,7 +170,7 @@ export const api = {
   status: () => request<Status>("/api/status"),
   diagnostics: () => request<Diagnostics>("/api/diagnostics"),
   logs: async (tail = 500): Promise<string> => {
-    const res = await fetch(`/api/logs?tail=${tail}`);
+    const res = await fetch(`/api/logs?tail=${tail}`, withKey());
     if (res.status === 404) return "";
     if (!res.ok) throw new Error(`Could not read the log (${res.status})`);
     return res.text();
@@ -160,6 +216,18 @@ export const api = {
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
     return xhrUpload<DocumentSummary[]>("/api/documents", fd, onProgress);
+  },
+  /** How a phone on the same Wi-Fi reaches this computer (answered on the PC only). */
+  lan: () => request<LanInfo>("/api/lan"),
+  lanQrUrl: () => `/api/lan/qr.png?t=${Date.now()}`,
+  /** Photographs of the pages of one document, in order, become one scanned document. */
+  scanPages: async (photos: File[], name: string, onProgress?: UploadProgress) => {
+    await checkReadable(photos);
+    await checkSize(photos);
+    const fd = new FormData();
+    photos.forEach((p) => fd.append("pages", p));
+    if (name.trim()) fd.append("name", name.trim());
+    return xhrUpload<DocumentSummary>("/api/documents/scan", fd, onProgress);
   },
   getPage: (id: string, page: number) => request<PageData>(`/api/documents/${id}/pages/${page}`),
   pageImageUrl: (id: string, page: number) => `/api/documents/${id}/pages/${page}/image`,
@@ -218,7 +286,7 @@ export const api = {
 export async function downloadBlob(url: string, init?: RequestInit, fallbackName?: string): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await fetch(url, withKey(init));
   } catch (e: any) {
     // Conversions send files through here too, and those can fail for the extra reason.
     const why = init?.body instanceof FormData ? UPLOAD_FAILED : NETWORK_FAILED;

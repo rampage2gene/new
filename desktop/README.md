@@ -71,7 +71,7 @@ remove a portable copy, delete the folder.
 
 ## Adding documents
 
-Three ways, all ending in the same processing:
+Four ways, all ending in the same processing:
 
 1. **Upload documents** button - in the desktop app this opens the ordinary
    Windows/macOS Open dialog; the app then reads the files straight off the
@@ -80,7 +80,10 @@ Three ways, all ending in the same processing:
    receives the drop and hands the app the files' paths, so this takes the
    same route as the Open dialog and never pushes the bytes through the web
    view. (Clicking the drop zone opens the Open dialog too.)
-3. **The inbox folder.** Copy PDFs or images into `<data dir>\inbox` - for a
+3. **The phone camera.** On a phone connected to the app (see "Use on your
+   phone" below), **Scan with the camera** in the library photographs the
+   pages one at a time and turns the set into a single document.
+4. **The inbox folder.** Copy PDFs or images into `<data dir>\inbox` - for a
    portable copy that is the `data\inbox` folder next to the executable - and
    the app picks them up within a couple of seconds. When processing finishes
    the original moves to `inbox\done\` next to the same six files described
@@ -128,6 +131,32 @@ with `MDI_ANTHROPIC_API_KEY=...` in `settings.env` the remaining blanks are
 shown to the model with the page image; without a key nothing leaves the
 machine. `MDI_OCR_ENGINE=tesseract` or `rapid` in `settings.env` forces a
 single reader; Diagnostics shows which readers this copy has.
+
+## Use on your phone
+
+The desktop app also answers on your Wi-Fi, so a phone on the same network can
+open the same UI. The computer keeps doing everything; the phone is a screen
+and a camera. Open **Use on your phone** in the sidebar:
+
+1. Put the phone on the same Wi-Fi as the computer.
+2. Point the phone camera at the QR code and tap the link.
+3. In the phone browser's menu choose **Add to Home Screen** for an icon of its own.
+
+On the phone you can read documents, search, fill in values from the **To fill
+in** tab with the paper page in your hand, and photograph pages with **Scan
+with the camera** in the library: one shot per page, then *Process N pages*
+binds them into a single document that is read like any other scan.
+
+| Point | Detail |
+|---|---|
+| The computer must stay on | It runs the app; the phone only shows it. |
+| Windows asks once | The first launch after updating shows a firewall prompt. Allow it on **private networks** or the phone cannot connect. |
+| Nothing leaves the network | Pages, values and exports stay on the computer, as before. |
+| One scan pairs the phone | The QR code carries a pairing key kept in `<data dir>\phone-key.txt`. Requests from the network without it are refused, and importing files by path is refused to everything but the computer itself. Delete that file and restart to hand out a new key, which un-pairs every phone. |
+| Turning it off | `MDI_LAN=false` in `settings.env` goes back to the computer only. |
+
+Over plain HTTP a phone makes a home-screen shortcut rather than an installed
+app; it opens full-screen either way.
 
 ## Troubleshooting
 

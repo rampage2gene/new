@@ -18,7 +18,7 @@ datas = [
     (str(ROOT / "desktop/icons"), "desktop/icons"),
 ]
 binaries, hiddenimports = [], []
-for pkg in ("pymupdf", "pytesseract", "anthropic", "openpyxl", "webview"):
+for pkg in ("pymupdf", "pytesseract", "anthropic", "openpyxl", "webview", "qrcode"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
 # The second OCR reader: PP-OCR models (.onnx) and config/default_models.yaml
@@ -64,7 +64,7 @@ if sys.platform == "darwin":
         icon=str(ICON),
         bundle_identifier="com.rampage2gene.marine-doc-intelligence",
         info_plist={
-            "CFBundleShortVersionString": "0.1.4",
+            "CFBundleShortVersionString": "0.1.5",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },

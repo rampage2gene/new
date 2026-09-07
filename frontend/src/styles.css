@@ -196,3 +196,46 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .tag.crit { background: var(--crit-soft); color: var(--crit); }
 tr.fill-blank td { background: var(--crit-soft); }
 a.badge { text-decoration: none; cursor: pointer; }
+
+/* Use on your phone */
+.phone-pair { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.phone-pair .qr-card { text-align: center; }
+.phone-pair .qr { display: block; width: 280px; height: 280px; max-width: 70vw; image-rendering: pixelated; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.phone-pair .addr { padding: 6px 8px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; word-break: break-all; }
+ol.steps-plain { padding-left: 20px; margin: 6px 0 14px; } ol.steps-plain li { margin-bottom: 5px; }
+
+/* Camera scan (phone) */
+.scan-strip { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.scan-shot { position: relative; width: 84px; }
+.scan-shot img { width: 84px; height: 110px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
+.scan-shot .n { position: absolute; top: 3px; left: 3px; background: rgba(18,38,63,0.85); color: #fff; font-size: 11px; padding: 0 5px; border-radius: 8px; }
+.scan-shot .x { position: absolute; top: 3px; right: 3px; background: rgba(179,38,30,0.9); color: #fff; border: 0; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; line-height: 1; }
+
+/* Phones and small windows. The desktop layout is two fixed columns; here
+   everything stacks and the touch targets grow. */
+@media (max-width: 860px) {
+  .app { flex-direction: column; }
+  .sidebar { width: auto; flex-direction: row; align-items: center; gap: 8px; overflow-x: auto; padding: 0 8px; }
+  .sidebar .brand { padding: 10px 8px 10px 4px; font-size: 13px; border-bottom: 0; white-space: nowrap; }
+  .sidebar .brand br, .sidebar .brand small { display: none; }
+  .sidebar nav { flex-direction: row; padding: 6px 0; gap: 4px; overflow-x: auto; }
+  .sidebar nav a { padding: 8px 10px; white-space: nowrap; min-height: 40px; }
+  .sidebar .status { display: none; } /* Diagnostics shows the same, with room for it */
+  .page { padding: 12px; }
+  .page-header { flex-wrap: wrap; gap: 8px; }
+  .viewer { flex-direction: column; }
+  .viewer-left { flex: none; height: 45vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  .viewer-right { flex: 1; min-width: 0; max-width: none; }
+  .calc-layout { flex-direction: column; }
+  .calc-list, .calc-form, .calc-result { width: auto; min-width: 0; }
+  .btn { padding: 9px 14px; min-height: 40px; }
+  .btn.sm { padding: 5px 10px; min-height: 32px; }
+  input[type=text], input[type=number], select, textarea { padding: 10px; min-height: 40px; }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-scroll table { min-width: 520px; }
+  .group { overflow-x: auto; } /* the Technical Data tables scroll rather than squeeze */
+  .msg.user .bubble { margin-left: 0; }
+  .hide-sm { display: none; }
+  .dropzone { padding: 16px; }
+  .phone-pair .qr { width: 100%; height: auto; }
+}

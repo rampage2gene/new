@@ -146,6 +146,8 @@ docker run -p 8000:8000 -v mdi-data:/data -e MDI_ANTHROPIC_API_KEY=sk-ant-... ma
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/documents` (multipart) | Upload one or more PDFs/images; processing runs in the background |
+| `POST /api/documents/scan` (multipart `pages`) | Photographs of the pages of one document → one scanned document |
+| `GET /api/lan` · `/api/lan/qr.png` · `POST /api/pair` | Phone access: the address and QR code (computer only) and the pairing exchange |
 | `GET /api/documents`, `GET /api/documents/{id}` | Library and document detail (metadata, structure, pages) |
 | `GET /api/documents/{id}/pages/{n}` · `/image` · `/file` | Page blocks with boxes, rendered page image, original file |
 | `GET /api/documents/{id}/spec-extraction` | Electrical Specification Extraction report |
@@ -179,6 +181,13 @@ Reading and checking scanned pages:
 | `MDI_VERIFY_AI` | `true` | When an Anthropic key is configured, show the remaining blanks to the model with the page image. Nothing leaves the machine without a key. |
 | `MDI_AI_VERIFY_MAX_PAGES` | `60` | Cost guard for that check. |
 | `MDI_AUTO_EXPORT` | `true` | Write `<data dir>/exports/<name>/` (OCR'd PDF, clean text PDF, workbook, CSV, JSON, text) for every processed document and again after each edit. |
+
+Using it from a phone on the same Wi-Fi ([desktop/README.md](desktop/README.md#use-on-your-phone)):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MDI_LAN` | `true` | The desktop app serves the UI on the local network as well as on the computer, so a phone can open it. `false` binds to localhost only. |
+| `MDI_ACCESS_KEY` | *(set by the launcher)* | The pairing key. Any `/api/` request from anything but the computer itself must carry it as an `X-MDI-Key` header or the cookie `POST /api/pair` sets. The desktop app generates one into `<data dir>/phone-key.txt`; with none configured (dev server, Docker) the API is open. |
 
 ## Limitations and roadmap
 

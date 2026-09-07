@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import platform
+import secrets
 import socket
 import subprocess
 import sys
@@ -25,7 +26,7 @@ from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
-APP_VERSION = "0.1.4"
+APP_VERSION = "0.1.5"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -155,6 +156,7 @@ def load_user_env(data_dir: Path) -> None:
             "# MDI_ANTHROPIC_API_KEY=sk-ant-...\n"
             "# MDI_AI_MODEL=claude-opus-5\n"
             "# MDI_TESSERACT_CMD=C:\\Program Files\\Tesseract-OCR\\tesseract.exe\n"
+            "# MDI_LAN=false   # do not serve the app to phones on this Wi-Fi\n"
         )
         return
     for line in env_file.read_text().splitlines():
@@ -163,6 +165,37 @@ def load_user_env(data_dir: Path) -> None:
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def env_flag(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
+def access_key(data_dir: Path) -> str:
+    """The pairing key a phone needs, generated once per installation.
+
+    Serving the UI on the Wi-Fi means anything on that network can knock, so
+    every API request that does not come from this computer has to carry this
+    key. It is kept in `<data dir>/phone-key.txt`; delete that file and the
+    next launch makes a new one, which un-pairs every phone.
+    """
+    key_file = data_dir / "phone-key.txt"
+    try:
+        existing = key_file.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+    key = secrets.token_urlsafe(12)
+    key_file.write_text(key + "\n", encoding="utf-8")
+    try:  # readable by this user only, where the OS supports it
+        key_file.chmod(0o600)
+    except OSError:  # pragma: no cover - Windows/FAT
+        pass
+    return key
 
 
 def find_tesseract() -> str | None:
@@ -198,11 +231,11 @@ def find_tesseract() -> str | None:
 
 
 # --------------------------------------------------------------------------- server
-def free_port(preferred: int = 8765) -> int:
+def free_port(preferred: int = 8765, host: str = "127.0.0.1") -> int:
     for port in (preferred, 0):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(("127.0.0.1", port))
+                s.bind((host, port))
                 return s.getsockname()[1]
             except OSError:
                 continue
@@ -210,8 +243,16 @@ def free_port(preferred: int = 8765) -> int:
 
 
 class ApiServer:
-    def __init__(self, port: int):
+    """The built-in API server.
+
+    `host` is `0.0.0.0` when the app is also serving a phone on the Wi-Fi and
+    `127.0.0.1` otherwise; either way the window itself opens the loopback
+    address, so the desktop app never depends on the network being up.
+    """
+
+    def __init__(self, port: int, host: str = "127.0.0.1"):
         self.port = port
+        self.host = host
         self._server = None
         self._thread: threading.Thread | None = None
 
@@ -226,7 +267,7 @@ class ApiServer:
 
         # use_colors=False: uvicorn otherwise asks sys.stdout whether it is a TTY,
         # which has no answer in a windowed build.
-        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="info", workers=1, use_colors=False)
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info", workers=1, use_colors=False)
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, name="api", daemon=True)
         self._thread.start()
@@ -377,8 +418,18 @@ def run() -> int:
     if not (frontend_dist() / "index.html").exists():
         return fatal(f"The user interface files are missing at {frontend_dist()}. Reinstall the app (developers: cd frontend && npm run build).")
 
-    port = int(os.environ.get("MDI_PORT") or free_port())
-    server = ApiServer(port)
+    # Serving on the Wi-Fi as well as on loopback is what lets a phone open the
+    # app (see the "Use on your phone" page). Windows asks once, at the first
+    # launch, whether to allow that: the answer must be yes for private networks.
+    lan = env_flag("MDI_LAN", True)
+    host = "0.0.0.0" if lan else "127.0.0.1"  # noqa: S104 - deliberate; the pairing key is the door
+    os.environ["MDI_LAN"] = "true" if lan else "false"
+    if lan:
+        os.environ.setdefault("MDI_ACCESS_KEY", access_key(data_dir))
+    log.info("serving on %s (phone access %s)", host, "on" if lan else "off")
+
+    port = int(os.environ.get("MDI_PORT") or free_port(host=host))
+    server = ApiServer(port, host)
     server.start()
     if not server.wait_ready():
         return fatal("The built-in server did not start within 60 seconds.")

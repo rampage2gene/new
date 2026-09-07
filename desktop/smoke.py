@@ -44,20 +44,25 @@ def make_sample_pdf(path: Path) -> None:
     doc.close()
 
 
-def upload_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
-    """POST the PDF as multipart/form-data (what the UI does) and poll until done."""
+def post_multipart(base: str, path: str, parts: list[tuple[str, str, str, bytes]]) -> object:
+    """POST `parts` as multipart/form-data: (field, filename, content type, bytes)."""
     boundary = "----mdi-smoke-boundary"
-    body = (
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"{pdf.name}\"\r\n"
-        f"Content-Type: application/pdf\r\n\r\n"
-    ).encode() + pdf.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
-    req = urllib.request.Request(base + "/api/documents", data=body, method="POST",
+    body = b""
+    for field, filename, content_type, data in parts:
+        body += (
+            f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{filename}\"\r\n"
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode() + data + b"\r\n"
+    body += f"--{boundary}--\r\n".encode()
+    req = urllib.request.Request(base + path, data=body, method="POST",
                                  headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     with urllib.request.urlopen(req, timeout=60) as r:
-        created = json.loads(r.read())
-    doc_id = created[0]["id"]
+        return json.loads(r.read())
+
+
+def poll_document(base: str, doc_id: str, timeout: float = 240) -> dict:
     deadline = time.time() + timeout
-    last = created[0]
+    last: dict = {}
     while time.time() < deadline:
         with urllib.request.urlopen(f"{base}/api/documents/{doc_id}", timeout=10) as r:
             last = json.loads(r.read())
@@ -65,6 +70,36 @@ def upload_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
             break
         time.sleep(1)
     return last
+
+
+def upload_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
+    """POST the PDF as multipart/form-data (what the UI does) and poll until done."""
+    created = post_multipart(base, "/api/documents", [("files", pdf.name, "application/pdf", pdf.read_bytes())])
+    return poll_document(base, created[0]["id"], timeout)
+
+
+def scan_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
+    """What the phone's camera button does: photographs of two pages, one document."""
+    import pymupdf
+
+    doc = pymupdf.open(pdf)
+    shots = [doc[i].get_pixmap(matrix=pymupdf.Matrix(1.5, 1.5), alpha=False).tobytes("png") for i in range(len(doc))]
+    doc.close()
+    parts = [("pages", f"page-{i + 1}.png", "image/png", data) for i, data in enumerate(shots)]
+    created = post_multipart(base, "/api/documents/scan", parts)
+    return poll_document(base, created["id"], timeout)
+
+
+def phone_check(base: str, data_dir: Path) -> dict:
+    """The phone door: the address to scan, the QR image, and the pairing key file."""
+    with urllib.request.urlopen(base + "/api/lan", timeout=10) as r:
+        info = json.loads(r.read())
+    info["key_file"] = (data_dir / "phone-key.txt").exists()
+    info["qr"] = None
+    if info.get("urls"):
+        with urllib.request.urlopen(base + "/api/lan/qr.png", timeout=10) as r:
+            info["qr"] = r.headers.get("Content-Type")
+    return info
 
 
 
@@ -116,6 +151,8 @@ def main() -> int:
     doc = None
     diag = None
     inbox_out = None
+    phone: dict | None = None
+    scan: dict | None = None
     try:
         while time.time() < deadline:
             if proc.poll() is not None:
@@ -152,6 +189,17 @@ def main() -> int:
                 print(f"inbox: {'wrote ' + str(inbox_out) if inbox_out else 'no OCR PDF appeared'}")
             except Exception as exc:
                 print(f"inbox failed: {type(exc).__name__}: {exc}")
+            try:
+                phone = phone_check(base, data_dir)
+                print(f"phone: enabled={phone.get('enabled')} key_file={phone.get('key_file')} "
+                      f"urls={phone.get('urls')} qr={phone.get('qr')}")
+            except Exception as exc:
+                print(f"phone check failed: {type(exc).__name__}: {exc}")
+            try:
+                scan = scan_and_process(base, pdf)
+                print(f"camera scan: status={scan.get('status')} pages={scan.get('page_count')} error={scan.get('error')}")
+            except Exception as exc:
+                print(f"camera scan failed: {type(exc).__name__}: {exc}")
     finally:
         if proc.poll() is None:
             proc.terminate()
@@ -181,6 +229,15 @@ def main() -> int:
     elif not inbox_out or inbox_out.stat().st_size == 0:
         ok = False
         print("FAILED: a PDF copied into the inbox folder did not come back as done/<name>.ocr.pdf")
+    elif not phone or not phone.get("enabled") or not phone.get("key_file"):
+        ok = False
+        print("FAILED: phone access is not set up (/api/lan or the pairing key file)")
+    elif phone.get("urls") and phone.get("qr") != "image/png":
+        ok = False
+        print("FAILED: the QR code for the phone is not a PNG")
+    elif not scan or scan.get("status") != "ready" or (scan.get("page_count") or 0) != 2:
+        ok = False
+        print("FAILED: photographed pages were not processed into a 2-page document")
     else:
         print(f"OK: {status}")
         print(f"log file present: {log.exists()}")

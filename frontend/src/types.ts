@@ -211,7 +211,18 @@ export interface DiagnosticsInfo {
   ai_model: string | null;
   embedding_provider: string;
   max_upload_mb: number;
+  phone_access?: boolean;
+  phone_key_required?: boolean;
   documents: { total: number; ready: number; failed: number };
+}
+
+/** What a phone on the same Wi-Fi needs in order to reach this computer. */
+export interface LanInfo {
+  enabled: boolean;
+  protected: boolean;
+  computer: string;
+  port: number;
+  urls: string[];
 }
 
 export interface Highlight { bbox: BBox; kind: "primary" | "secondary" | "entity" | "component"; label?: string; confidence?: string }

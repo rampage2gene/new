@@ -47,6 +47,11 @@ export default function DiagnosticsPage() {
         ["AI reasoning", info.ai_available ? (info.ai_model ?? "available") : "not configured (answers fall back to quoting the document)"],
         ["Embeddings", info.embedding_provider],
         ["Upload limit", `${info.max_upload_mb} MB per file`],
+        ["Phone access", info.phone_access === false
+          ? "off (MDI_LAN=false) — the app answers on this computer only"
+          : info.phone_key_required
+            ? "on — a phone on this Wi-Fi can pair with the QR code on “Use on your phone”"
+            : "on, with no pairing key — anything on this network can use the app"],
         ["Documents", `${info.documents.total} total · ${info.documents.ready} ready · ${info.documents.failed} failed`],
       ]
     : [];

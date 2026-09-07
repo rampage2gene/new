@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -18,6 +19,7 @@ from ..ingest import pipeline
 from ..ingest.identify import identify_file
 from ..models import Block, Document, Page, QCFlag
 from ..storage.files import delete_document_files, sha256_of, store_original
+from .lan import is_loopback
 from .serializers import block_dict, document_detail, document_summary, flag_dict, page_summary
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -96,13 +98,17 @@ class ImportRequest(BaseModel):
 
 
 @router.post("/import", status_code=201)
-def import_documents(req: ImportRequest, db: Session = Depends(get_db)) -> list[dict]:
+def import_documents(request: Request, req: ImportRequest, db: Session = Depends(get_db)) -> list[dict]:
     """Ingest files by local path - what the desktop app's Open dialog uses.
 
     The bytes never travel through the web view: the server reads them off the
-    disk itself. Localhost-bound and single-user, so a path the user just picked
-    in a native dialog needs no more checking than "is it a file".
+    disk itself. A path the user just picked in a native dialog needs no more
+    checking than "is it a file", so this route names files on the computer's
+    own disk and is refused to everything but the computer itself; a phone on
+    the network uploads its pages instead.
     """
+    if not is_loopback(request):
+        raise HTTPException(403, "Files can only be imported by path on the computer running the app.")
     log.info("import: %d path(s): %s", len(req.paths), ", ".join(req.paths))
     created: list[dict] = []
     for raw in req.paths:
@@ -113,6 +119,48 @@ def import_documents(req: ImportRequest, db: Session = Depends(get_db)) -> list[
         doc = create_document_from_file(db, path, path.name)
         created.append(document_summary(doc))
     return created
+
+
+@router.post("/scan", status_code=201)
+async def scan_pages(
+    pages: list[UploadFile] = File(...),
+    name: str | None = Form(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Turn photographs of the pages of one document into a single document.
+
+    What the phone's **Scan with the camera** button posts: one shot per page,
+    in order. The photos are bound into one PDF (`exports.convert.images_to_pdf`)
+    and then take exactly the route an uploaded scan takes - both OCR readers,
+    verification, the exports folder - so a photographed manual is not a
+    second-class citizen.
+    """
+    from ..exports.convert import images_to_pdf
+
+    settings = get_settings()
+    log.info("scan: %d page photo(s)", len(pages))
+    shots: list[tuple[str, bytes]] = []
+    total = 0
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for index, up in enumerate(pages, start=1):
+            data = await up.read()
+            total += len(data)
+            if total > settings.max_upload_mb * (1 << 20):
+                raise HTTPException(413, f"The photos exceed the {settings.max_upload_mb} MB limit.")
+            shot_name = up.filename or f"page-{index}.jpg"
+            probe = Path(tmpdir) / f"{index}-{Path(shot_name).name}"
+            probe.write_bytes(data)
+            if identify_file(probe, shot_name).file_type != "image":
+                log.warning("scan rejected: %s is not a photo", shot_name)
+                raise HTTPException(415, f"{shot_name}: that is not a photo. Take the pages with the camera.")
+            shots.append((shot_name, data))
+        if not shots:
+            raise HTTPException(400, "No pages were sent.")
+        stem = (name or "").strip() or f"Scan {datetime.now().strftime('%Y-%m-%d %H%M')}"
+        pdf_path = Path(tmpdir) / "scan.pdf"
+        pdf_path.write_bytes(images_to_pdf(shots))
+        doc = create_document_from_file(db, pdf_path, f"{stem}.pdf")
+    return document_summary(doc)
 
 
 @router.get("")

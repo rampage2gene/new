@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { api } from "./api";
+import { api, isPhone } from "./api";
 import type { Status } from "./types";
 import LibraryPage from "./pages/LibraryPage";
 import DocumentPage from "./pages/DocumentPage";
@@ -10,6 +10,7 @@ import ComparePage from "./pages/ComparePage";
 import InvoicesPage from "./pages/InvoicesPage";
 import ConvertPage from "./pages/ConvertPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
+import PhonePage from "./pages/PhonePage";
 
 const NAV = [
   { to: "/library", label: "Document Library", icon: "▤" },
@@ -18,6 +19,8 @@ const NAV = [
   { to: "/compare", label: "Compare Documents", icon: "⇄" },
   { to: "/invoices", label: "Invoices & Parts", icon: "¤" },
   { to: "/convert", label: "Convert & Export", icon: "⇩" },
+  // Only useful on the computer: the phone is already connected.
+  { to: "/phone", label: "Use on your phone", icon: "▯", desktopOnly: true },
   { to: "/diagnostics", label: "Diagnostics", icon: "⚙" },
 ];
 
@@ -56,7 +59,7 @@ export default function App() {
           <small>OCR · extraction · cited answers · calculators</small>
         </div>
         <nav>
-          {NAV.map((n) => (
+          {NAV.filter((n) => !n.desktopOnly || !isPhone()).map((n) => (
             <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? "active" : "")}>
               <span aria-hidden>{n.icon}</span> {n.label}
             </NavLink>
@@ -95,6 +98,7 @@ export default function App() {
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/convert" element={<ConvertPage />} />
+          <Route path="/phone" element={<PhonePage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
         </Routes>
       </main>

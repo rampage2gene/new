@@ -214,6 +214,9 @@ Status: **I** implemented, **P** partial, **R** roadmap. "Test" names the pytest
 | DESK-3 | Tesseract is discovered from `MDI_TESSERACT_CMD`, a `tesseract/` folder beside the executable, standard install paths, then `PATH`; Windows builds bundle it. | I | §16.5 |
 | DESK-4 | `desktop/build.py` produces a PyInstaller bundle (`dist/MarineDocIntelligence/` or the macOS `.app`); the "Desktop builds" workflow builds Windows, macOS (x64, arm64) and Linux artifacts on every push (Windows also as an Inno Setup per-user installer with Start menu entry and uninstaller) and attaches them to a Release on `v*` tags. | I | `.github/workflows/desktop-build.yml` |
 | DESK-5 | Icon set generated procedurally by `desktop/make_icon.py` (PNG 16–1024, `.ico`, `.icns`, `.svg`). | I | files in `desktop/icons/` |
+| DESK-6 | With `MDI_LAN` (default on) the desktop app also serves the UI on the local network, so a phone on the same Wi-Fi opens the same application; processing, storage and exports stay on the computer. The window itself always uses the loopback address. | I | `tests/test_desktop_launcher.py`, §16.5 |
+| DESK-7 | Access control for that: the launcher generates a pairing key into `<data dir>/phone-key.txt` (`MDI_ACCESS_KEY`). Every `/api/` request from a non-loopback client must carry it (`X-MDI-Key` header or the `mdi_key` cookie set by `POST /api/pair`), else 401; `GET /api/lan` and `/api/lan/qr.png` (which disclose the key) and `POST /api/documents/import` (which reads the computer's disk) answer loopback clients only. With no key configured the API is open, as before. | A | `tests/test_lan.py` |
+| DESK-8 | The UI is usable on a phone: a stacked layout at ≤ 860 px, a web manifest and service worker for *Add to Home Screen*, and `POST /api/documents/scan`, which binds photographs of pages into one document and processes it as a scan. | A/I | `tests/test_scan.py`, §16.5 |
 
 ## 5. System architecture
 

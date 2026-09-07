@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.1.5 - 2026-09-07
+
+Use the app from your phone. The computer keeps doing all the work; the phone
+is a screen and a camera on the same Wi-Fi.
+
+- Added: **Use on your phone** in the sidebar - a QR code. Scan it with the
+  phone camera while both are on the same Wi-Fi and the app opens on the
+  phone; the browser's *Add to Home Screen* gives it an icon of its own.
+- Added: the desktop app now serves the UI on the local network as well as on
+  the computer itself. Everything - documents, reading, checking, exports -
+  stays on the PC; nothing leaves the network and the PC has to be on.
+  Switch it off with `MDI_LAN=false` in `settings.env`.
+- Added: a **pairing key**, generated once and kept in
+  `<data dir>/phone-key.txt`. Any request from the network that does not carry
+  it is refused; the QR code carries it, so one scan pairs the phone for good.
+  Delete the file and restart to hand out a new one. Importing files by path is
+  refused to everything but the computer itself.
+- Added: **Scan with the camera** in the library on a phone: photograph the
+  pages one at a time, review the strip, and *Process N pages* turns them into
+  one document that is read exactly like any other scan
+  (`POST /api/documents/scan`).
+- Added: a phone-sized layout - the sidebar becomes a top bar, the document
+  viewer stacks the page above the tabs, wide tables scroll, and buttons and
+  inputs are big enough for a thumb. **To fill in** works from the phone, so a
+  value can be typed in with the original page in your hand.
+- Note: Windows asks once whether to let the app onto the network. Allow it for
+  **private networks**, or the phone cannot connect.
+
 ## v0.1.4 - 2026-09-07
 
 A better OCR, and every value it reads is checked by a second reader. What

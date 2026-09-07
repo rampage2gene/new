@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     # Serving
     frontend_dist: Path = REPO_DIR / "frontend" / "dist"
     max_upload_mb: int = 200
+    # Phone access: the desktop app serves the UI on the local network so a phone
+    # on the same Wi-Fi can open it, and gates the API with a pairing key that
+    # the launcher generates. With no key configured (dev server, Docker) the
+    # API is open, as it was before.
+    lan: bool = True
+    access_key: str | None = None
 
     @property
     def originals_dir(self) -> Path:

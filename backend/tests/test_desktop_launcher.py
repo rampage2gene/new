@@ -174,3 +174,37 @@ def test_bridge_open_folder(launcher, monkeypatch, tmp_path):
     assert opened == [["xdg-open", str(tmp_path)]]
     assert bridge.open_folder(str(tmp_path / "missing")) is False
     assert bridge.open_folder(str(tmp_path / "file.txt")) is False
+
+
+def test_access_key_is_made_once_and_kept(launcher, tmp_path):
+    key = launcher.access_key(tmp_path)
+    assert key and (tmp_path / "phone-key.txt").read_text(encoding="utf-8").strip() == key
+    assert launcher.access_key(tmp_path) == key  # a phone stays paired across launches
+
+
+def test_env_flag(launcher, monkeypatch):
+    monkeypatch.delenv("MDI_LAN", raising=False)
+    assert launcher.env_flag("MDI_LAN", True) is True
+    for off in ("0", "false", "no", "OFF"):
+        monkeypatch.setenv("MDI_LAN", off)
+        assert launcher.env_flag("MDI_LAN", True) is False
+    monkeypatch.setenv("MDI_LAN", "true")
+    assert launcher.env_flag("MDI_LAN", True) is True
+
+
+def test_api_server_binds_where_it_is_told(launcher):
+    assert launcher.ApiServer(1234).host == "127.0.0.1"
+    assert launcher.ApiServer(1234, "0.0.0.0").host == "0.0.0.0"
+
+
+def test_lan_addresses_are_private_ipv4(launcher):
+    import ipaddress
+    import sys
+
+    sys.path.insert(0, str(LAUNCHER.parents[1] / "backend"))
+    from app.api.lan import lan_addresses, phone_urls
+
+    for addr in lan_addresses():
+        ip = ipaddress.ip_address(addr)
+        assert ip.version == 4 and ip.is_private and not ip.is_loopback
+    assert phone_urls(8765, "abc") == [f"http://{a}:8765/?key=abc" for a in lan_addresses()]
