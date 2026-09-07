@@ -72,10 +72,29 @@ def poll_document(base: str, doc_id: str, timeout: float = 240) -> dict:
     return last
 
 
+def wait_for_exports(base: str, doc: dict, timeout: float = 90) -> dict:
+    """Keep reading the document until its exports folder is on disk.
+
+    A document reports "ready" before the exports folder has been written -
+    that is the documented contract, the folder is produced once processing
+    finishes and again after every edit - so reading the document once at
+    "ready" and asking where its exports are is a coin flip. Wait for them.
+    """
+    if doc.get("status") != "ready":
+        return doc
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _exports_ok((doc.get("stats") or {}).get("export_dir")):
+            break
+        time.sleep(1)
+        doc = poll_document(base, doc["id"], timeout=30)
+    return doc
+
+
 def upload_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
     """POST the PDF as multipart/form-data (what the UI does) and poll until done."""
     created = post_multipart(base, "/api/documents", [("files", pdf.name, "application/pdf", pdf.read_bytes())])
-    return poll_document(base, created[0]["id"], timeout)
+    return wait_for_exports(base, poll_document(base, created[0]["id"], timeout))
 
 
 def scan_and_process(base: str, pdf: Path, timeout: float = 240) -> dict:
@@ -225,7 +244,9 @@ def main() -> int:
         print("FAILED: the second reader (Tesseract) did not run, so values were not cross-checked")
     elif not _exports_ok((doc.get("stats") or {}).get("export_dir")):
         ok = False
-        print("FAILED: the exports folder is missing the workbook or the clean PDF")
+        folder = (doc.get("stats") or {}).get("export_dir")
+        holds = sorted(p.name for p in Path(folder).glob("*")) if folder else "(the document names no exports folder)"
+        print(f"FAILED: the exports folder is missing the workbook or the clean PDF: {folder} holds {holds}")
     elif not inbox_out or inbox_out.stat().st_size == 0:
         ok = False
         print("FAILED: a PDF copied into the inbox folder did not come back as done/<name>.ocr.pdf")

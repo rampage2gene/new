@@ -88,6 +88,27 @@ def test_the_computer_gets_the_address_and_the_qr_code(guarded):
         assert qr.content[:4] == b"\x89PNG"
 
 
+def test_finding_the_addresses_never_waits_on_a_name_lookup(monkeypatch):
+    """Regression: resolving this machine's own hostname blocks for as long as
+    the resolver takes when the name has no DNS entry, which timed out
+    /api/lan on a build runner. Nothing here may look a name up."""
+    import socket as socket_module
+    import time
+
+    from app.api import lan
+
+    def refuse(*args, **kwargs):  # pragma: no cover - fails the test if reached
+        raise AssertionError("lan_addresses must not resolve names")
+
+    monkeypatch.setattr(lan.socket, "getaddrinfo", refuse)
+    monkeypatch.setattr(lan.socket, "gethostbyname", refuse)
+    started = time.monotonic()
+    for addr in lan.lan_addresses():
+        ip = socket_module.inet_aton(addr)  # a literal address, not a name
+        assert ip and not addr.startswith("127.")
+    assert time.monotonic() - started < 2
+
+
 def test_without_a_key_the_api_is_open(client):
     """The dev server and the Docker image configure no key and behave as before."""
     with TestClient(client.app, base_url=BASE, client=PHONE) as c:

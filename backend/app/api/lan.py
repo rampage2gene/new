@@ -35,9 +35,11 @@ PAIR_MESSAGE = "Pair this device first: open “Use on your phone” on the comp
 ONLY_HERE = "This is only available on the computer running the app."
 
 # UDP "connect" targets used to find which interface this machine would send
-# from. No packet is sent; the first that the routing table can answer wins,
-# so this works with no Internet connection.
-_ROUTE_PROBES = ("192.168.1.1", "10.0.0.1", "8.8.8.8")
+# from. No packet is sent and nothing is looked up: the kernel just answers
+# "which of my addresses would I use to reach that", so this is instant and
+# works with no Internet connection. One target per private range, so a
+# machine on several networks offers each of them.
+_ROUTE_PROBES = ("192.168.1.1", "10.0.0.1", "172.16.0.1", "8.8.8.8")
 
 
 def client_host(request: Request) -> str:
@@ -56,13 +58,20 @@ def is_loopback(request: Request) -> bool:
 
 
 def lan_addresses() -> list[str]:
-    """This machine's private IPv4 addresses, the one facing the router first."""
+    """This machine's private IPv4 addresses, the one facing the router first.
+
+    Deliberately no name lookup: resolving this machine's own hostname is the
+    obvious way to enumerate addresses and the wrong one, because on a machine
+    whose hostname has no DNS entry it blocks for as long as the resolver
+    takes - which is how this endpoint first timed out on a build runner.
+    Asking the routing table costs nothing and sends nothing.
+    """
     found: list[str] = []
 
     def add(addr: str) -> None:
         try:
             ip = ipaddress.ip_address(addr)
-        except ValueError:
+        except ValueError:  # pragma: no cover - the kernel returns an address
             return
         if ip.version != 4 or ip.is_loopback or ip.is_link_local or not ip.is_private:
             return
@@ -73,15 +82,9 @@ def lan_addresses() -> list[str]:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             try:
                 s.connect((probe, 9))
-                add(s.getsockname()[0])
-                break
             except OSError:
-                continue
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            add(info[4][0])
-    except OSError:  # pragma: no cover - a hostname that does not resolve
-        pass
+                continue  # no route that way; try the next network
+            add(s.getsockname()[0])
     return found
 
 

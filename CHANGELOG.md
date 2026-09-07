@@ -27,6 +27,10 @@ is a screen and a camera on the same Wi-Fi.
   value can be typed in with the original page in your hand.
 - Note: Windows asks once whether to let the app onto the network. Allow it for
   **private networks**, or the phone cannot connect.
+- The addresses to give the phone come from the routing table only. Looking up
+  this machine's own hostname is the usual way to enumerate them and blocks for
+  as long as the resolver takes when that name has no DNS entry, which made the
+  page hang on a machine with no entry for itself.
 
 ## v0.1.4 - 2026-09-07
 
