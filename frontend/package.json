@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "ui:check": "node scripts/ui-check.mjs",
+    "ui:shots": "npm run build && node scripts/screenshots.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

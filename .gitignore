@@ -31,3 +31,4 @@ frontend/tsconfig.tsbuildinfo
 # Desktop builds
 build/
 dist/
+frontend/.ui-shots/
