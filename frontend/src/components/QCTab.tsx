@@ -11,9 +11,24 @@ export default function QCTab({ doc, jump }: { doc: DocumentDetail; jump: Jump }
     api.documentEntities(doc.id).then((es) => setEntities(Object.fromEntries(es.map((e) => [e.id, e]))));
   }, [doc.id]);
   if (!flags) return <span className="spinner" />;
+  /** Set a flag aside. Only for flags about the document rather than one
+   *  value - it changes nothing about any number. */
   const toggle = async (f: QCFlag) => {
     const u = await api.resolveFlag(doc.id, f.id, !f.resolved);
     setFlags((fs) => fs!.map((x) => (x.id === u.id ? u : x)));
+  };
+  /** Confirm the value this flag is about, having read it on the page.
+   *
+   *  This used to resolve the flag and nothing else, which left the value
+   *  itself unconfirmed at its machine confidence - so a button labelled
+   *  "Mark verified", in the tab called Verification, produced an unverified
+   *  number in every export. It now does what the same act does in the
+   *  To fill in tab: the value becomes yours, at 100%, and the server
+   *  resolves the reading flag itself. */
+  const confirmValue = async (entity: Entity) => {
+    const u = await api.setVerified(entity.id, true);
+    setEntities((es) => ({ ...es, [u.id]: u }));
+    setFlags(await api.qcFlags(doc.id));
   };
   return (
     <div>
@@ -35,7 +50,17 @@ export default function QCTab({ doc, jump }: { doc: DocumentDetail; jump: Jump }
               <span className="badge">{f.flag_type.replace(/_/g, " ")}</span>
               {f.page && <a href="#" className="small" onClick={(ev) => { ev.preventDefault(); jump(f.page!, e?.bbox, "primary", e?.value_text); }}>Open page {f.page}</a>}
               <span className="grow" />
-              <button className="btn sm" onClick={() => toggle(f)}>{f.resolved ? "Reopen" : "Mark verified"}</button>
+              {e && !e.verified ? (
+                <button className="btn sm" onClick={() => confirmValue(e)} title="Confirm this value as the page shows it: it becomes yours, at 100%, in every export">
+                  The page shows {e.value_text || "this value"}
+                </button>
+              ) : e?.verified ? (
+                <span className="tag ok" title="You confirmed this value">✓ confirmed by you</span>
+              ) : (
+                <button className="btn sm" onClick={() => toggle(f)} title="Set this note aside; it is about the document, not one value">
+                  {f.resolved ? "Reopen" : "Mark reviewed"}
+                </button>
+              )}
             </div>
             <div style={{ marginTop: 4 }}>{f.message}</div>
             {e && <div className="small muted" style={{ marginTop: 4 }}>“{e.snippet}”</div>}

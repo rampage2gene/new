@@ -20,8 +20,10 @@ export function verificationTag(e: Entity): { label: string; cls: string; title:
     case "corrected":
     case "ai_corrected": return { label: "corrected", cls: "warn", title: `Was ${v.original}; two other readings agreed on ${e.value_text}\n${readings}` };
     case "to_fill": return { label: "to fill in", cls: "crit", title: `Readings differ; left blank\n${readings}` };
+    // A value only one reader could see is the least certain thing on the
+    // screen; it may not wear the neutral tag (docs/UI.md §6).
     case "unverified":
-    case "single": return { label: "1 reader", cls: "", title: "Only one reading of this spot could be made; confirm it on the page" };
+    case "single": return { label: "1 reader", cls: "warn", title: "Only one reading of this spot could be made; confirm it on the page" };
     case "embedded": return null;
     default: return null;
   }

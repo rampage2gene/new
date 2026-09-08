@@ -29,6 +29,9 @@ export default function LibraryPage() {
   // `mdi:dropped` event follows, so a drop never silently vanishes.
   const heldDrop = useRef<{ files: File[]; timer: number } | null>(null);
   useEffect(() => { api.diagnostics().then(setInfo).catch(() => setInfo(null)); }, []);
+  const refresh = useCallback(() => api.listDocuments().then(setDocs).catch((e) => setError(e.message)), []);
+  useEffect(() => { refresh(); }, [refresh]);
+
   useEffect(() => {
     const cancelHold = () => {
       if (heldDrop.current) {
@@ -36,13 +39,22 @@ export default function LibraryPage() {
         heldDrop.current = null;
       }
       setUploading(false);
+      // The window handled the drop and App imported the files by path. This
+      // page is already mounted, so nothing would otherwise refetch and the
+      // dropped document would never appear - the drop looked like it failed.
+      // Give the import a moment to be queued, then look: once the row is
+      // there the ordinary progress poll takes over.
+      window.setTimeout(refresh, 1200);
     };
     window.addEventListener("mdi:dropped", cancelHold);
-    return () => window.removeEventListener("mdi:dropped", cancelHold);
-  }, []);
-
-  const refresh = useCallback(() => api.listDocuments().then(setDocs).catch((e) => setError(e.message)), []);
-  useEffect(() => { refresh(); }, [refresh]);
+    // Files copied into the inbox folder are read while the app is in the
+    // background; look again when the user comes back to it.
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("mdi:dropped", cancelHold);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [refresh]);
   const busy = docs.some((d) => d.status === "queued" || d.status === "processing");
   useEffect(() => {
     if (!busy) return;
@@ -197,7 +209,11 @@ export default function LibraryPage() {
   };
 
   const remove = async (d: DocumentSummary) => {
-    if (!confirm(`Delete "${d.title}" and all extracted data?`)) return;
+    // Name what is actually lost: the values the user typed are the part that
+    // cannot be recovered by processing the file again.
+    const mine = d.stats?.verified_by_user || 0;
+    const cost = mine ? ` ${mine} value${mine === 1 ? "" : "s"} you confirmed will go with it.` : "";
+    if (!confirm(`Delete "${d.title}" and everything extracted from it?${cost}`)) return;
     await api.deleteDocument(d.id);
     refresh();
   };
@@ -323,12 +339,17 @@ export default function LibraryPage() {
                     {(d.status === "queued" || d.status === "processing") && <span className="progress-text"><span className="spinner" /> {d.progress || d.status}</span>}
                     {d.status === "failed" && <div className="small muted" style={{ maxWidth: 220 }}>{d.error}</div>}
                   </td>
-                  <td className="row" style={{ flexWrap: "nowrap" }}>
+                  <td>
+                    {/* display:flex on a <td> takes the cell out of the row's
+                        layout and the row borders stop lining up. */}
+                    <div className="row" style={{ flexWrap: "nowrap" }}>
                     {d.status === "ready" && <Link className="btn sm" to={`/documents/${d.id}`}>Open</Link>}
                     {d.status === "ready" && d.ocr_pages ? <a className="btn sm" href={api.searchablePdfUrl(d.id)} title="This document with the OCR text layer added, so the text can be selected and searched in any PDF viewer">OCR'd PDF</a> : null}
                     {d.status === "ready" ? <button className="btn sm" onClick={() => openFolder(d)} title={d.stats?.export_dir ? `Open ${d.stats.export_dir}: OCR'd PDF, clean text PDF, workbook, CSV, JSON, text` : "The exports folder for this document"}>Open folder</button> : null}
-                    <button className="btn sm" onClick={() => api.reprocessDocument(d.id).then(refresh)} title="Re-run OCR and extraction">↻</button>
-                    <button className="btn sm danger" onClick={() => remove(d)}>✕</button>
+                    <button className="btn sm" aria-label={`Read "${d.title}" again`} onClick={() => api.reprocessDocument(d.id).then(refresh)} title="Read the document again with every OCR reader. Values you filled in are kept.">↻</button>
+                    <span className="grow" />
+                    <button className="btn sm danger" aria-label={`Delete "${d.title}"`} title="Delete this document and everything extracted from it" onClick={() => remove(d)}>✕</button>
+                    </div>
                   </td>
                 </tr>
               ))}

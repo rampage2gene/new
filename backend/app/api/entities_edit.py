@@ -117,6 +117,20 @@ def _refresh_counts(db: Session, document_id: str) -> None:
         return
     ents = db.query(Entity).filter(Entity.document_id == document_id).all()
     stats = dict(doc.stats or {})
-    stats["to_fill"] = sum(1 for x in ents if ((x.extra or {}).get("verification") or {}).get("status") == "to_fill")
+    status = lambda x: ((x.extra or {}).get("verification") or {}).get("status")  # noqa: E731
+    stats["to_fill"] = sum(1 for x in ents if not x.verified and status(x) == "to_fill")
     stats["verified_by_user"] = sum(1 for x in ents if x.verified)
+    # The verification block is written once when the document is read. Left
+    # alone it never moves, so the library's "N to fill in" badge could not
+    # count down and "all values checked" could never appear however much
+    # work the user did. Recount it from what the values say now.
+    verification = dict(stats.get("verification") or {})
+    if verification:
+        verification["to_fill"] = stats["to_fill"]
+        verification["unverified"] = sum(1 for x in ents if not x.verified and status(x) in ("single", "unverified"))
+        verification["confirmed"] = sum(
+            1 for x in ents if x.verified or status(x) in ("confirmed", "ai_confirmed")
+        )
+        verification["corrected"] = sum(1 for x in ents if not x.verified and status(x) in ("corrected", "ai_corrected"))
+        stats["verification"] = verification
     doc.stats = stats

@@ -106,7 +106,12 @@ export default function FillInTab({ doc, jump, onChanged }: { doc: DocumentDetai
               {open.map((e) => {
                 const readings = Array.from(new Set(Object.values(e.verification?.readings || {}).filter(Boolean) as string[]));
                 const blank = e.verification?.status === "to_fill";
-                const draft = drafts[e.id] ?? (blank ? "" : e.value_text);
+                // Never seed the box with what the machine read. A pre-filled
+                // input turns "press Enter" into recording a machine reading
+                // as the user's own confirmation, which is the one thing this
+                // application must not do. The reading stays offered as a
+                // click in "Read as", where using it is a deliberate act.
+                const draft = drafts[e.id] ?? "";
                 return (
                   <tr key={e.id} className={blank ? "fill-blank" : undefined}>
                     <td>{typeLabel(e.entity_type)}{e.application ? <div className="small muted">{e.application}</div> : null}</td>
@@ -125,7 +130,7 @@ export default function FillInTab({ doc, jump, onChanged }: { doc: DocumentDetai
                         ref={(el) => { inputs.current[e.id] = el; }}
                         type="text"
                         value={draft}
-                        placeholder={blank ? "type the value from the page" : ""}
+                        placeholder={blank ? "type the value from the page" : `type it, or confirm “${e.value_text}”`}
                         onChange={(ev) => setDrafts((d) => ({ ...d, [e.id]: ev.target.value }))}
                         onKeyDown={(ev) => {
                           if (ev.key === "Enter") {
@@ -138,9 +143,13 @@ export default function FillInTab({ doc, jump, onChanged }: { doc: DocumentDetai
                       />
                     </td>
                     <td><ConfidenceCell entity={e} /></td>
-                    <td className="row" style={{ flexWrap: "nowrap" }}>
-                      <button className="btn sm primary" disabled={busy === e.id || !draft.trim()} onClick={() => save(e, draft)}>Save</button>
-                      {!blank && <button className="btn sm" disabled={busy === e.id} onClick={() => confirm(e)} title="The page shows exactly this">Confirm as is</button>}
+                    <td>
+                      {/* display:flex on a <td> takes the cell out of the row's
+                          layout; the buttons need their own box. */}
+                      <div className="row" style={{ flexWrap: "nowrap" }}>
+                        <button className="btn sm primary" disabled={busy === e.id || !draft.trim()} onClick={() => save(e, draft)}>Save</button>
+                        {!blank && <button className="btn sm" disabled={busy === e.id} onClick={() => confirm(e)} title="The page shows exactly this">Confirm as is</button>}
+                      </div>
                     </td>
                   </tr>
                 );
