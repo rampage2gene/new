@@ -6,12 +6,12 @@ Settling the values the readers could not agree on stops being a chase around
 the screen, and the app finally says how much work is actually left.
 
 - Changed: in **To fill in**, the page image follows whatever row you touch —
-  typing in it, tabbing to it, clicking one of its readings or confirming it
-  as it stands — with the value highlighted, and Enter carries both the caret
-  and the page to the next row. The trip to the page link and back, once per
-  value, is gone: on a document with a dozen values that is roughly a third of
-  the actions, and the page you are confirming is always the one in front of
-  you.
+  typing in it, tabbing to it, moving the mouse onto it, clicking one of its
+  readings or confirming it as it stands — with the value highlighted, and
+  Enter carries both the caret and the page to the next row. The trip to the
+  page link and back, once per value, is gone: on a document with a dozen
+  values that is roughly a third of the actions, and the page you are
+  confirming is always the one in front of you.
 - Fixed: the value box **no longer arrives pre-filled with what the machine
   read**. Holding Enter used to walk the list stamping unconfirmed readings as
   confirmed by you. The reading is still one click away under *Read as*, where

@@ -39,9 +39,19 @@ export default function DocumentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Asking for the spot already on screen has to be a real no-op. In To fill in
+  // every way of touching a row asks for its page, so one row can ask several
+  // times over; handing back a fresh list each time would restart the page
+  // view's scroll-to-the-value and drag the page away from someone who had
+  // just scrolled it themselves.
   const jump: Jump = useCallback((p, bbox, kind = "primary", label) => {
     setPage(p);
-    setHighlights(bbox ? [{ bbox, kind, label }] : []);
+    setHighlights((prev) => {
+      if (!bbox) return prev.length === 0 ? prev : [];
+      const cur = prev[0];
+      const same = prev.length === 1 && cur.kind === kind && cur.label === label && cur.bbox.every((n, i) => n === bbox[i]);
+      return same ? prev : [{ bbox, kind, label }];
+    });
   }, []);
 
   const setComponentHighlights = useCallback((hs: Highlight[]) => setHighlights(hs), []);

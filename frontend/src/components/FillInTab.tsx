@@ -54,9 +54,10 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
    *  the page link, a hunt, and a trip back, for every row.
    *
    *  Every way of touching a row calls this - typing in it, tabbing to it,
-   *  clicking one of its readings, confirming it as it stands - so the page
-   *  on screen is always the page the row came from. It cannot force anyone
-   *  to read it; what it can do is make reading cost nothing. */
+   *  reaching it with the mouse, clicking one of its readings, confirming it
+   *  as it stands - so the page on screen is always the page the row came
+   *  from. It cannot force anyone to read it; what it can do is make reading
+   *  cost nothing. */
   const showOnPage = (e: Entity) => jump(e.page, e.bbox, "primary", e.value_text || e.raw_text);
 
   const reverify = async () => {
@@ -114,9 +115,13 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                   // click in "Read as", where using it is a deliberate act.
                   const draft = drafts[e.id] ?? "";
                   return (
-                    // onFocus on the row, not the box: tabbing to a reading
-                    // button or to Confirm as is must bring the page up too.
-                    <tr key={e.id} className={blank ? "fill-blank" : undefined} onFocus={() => showOnPage(e)}>
+                    // Both handlers sit on the row rather than on each control.
+                    // Focus bubbles, so one is enough to cover the box and every
+                    // button beside it. Reaching the row with a mouse shows its
+                    // page too, so the page is up before a reading is accepted
+                    // rather than after - once per row, not once per button
+                    // passed on the way.
+                    <tr key={e.id} className={blank ? "fill-blank" : undefined} onFocus={() => showOnPage(e)} onMouseEnter={() => showOnPage(e)}>
                       <td>{typeLabel(e.entity_type)}{e.application ? <div className="small muted">{e.application}</div> : null}</td>
                       <td className="small">
                         <a href="#" onClick={(ev) => { ev.preventDefault(); showOnPage(e); }}>p.{e.page}{e.page === page ? " ✓" : ""}</a>
@@ -124,7 +129,7 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                       </td>
                       <td className="small">
                         {readings.length ? readings.map((r) => (
-                          <button key={r} className="btn sm" style={{ marginRight: 4, marginBottom: 2 }} onMouseEnter={() => showOnPage(e)} onClick={() => { showOnPage(e); save(e, r); }} disabled={busy === e.id} title="Use this reading">{r}</button>
+                          <button key={r} className="btn sm" style={{ marginRight: 4, marginBottom: 2 }} onClick={() => { showOnPage(e); save(e, r); }} disabled={busy === e.id} title="Use this reading">{r}</button>
                         )) : <span className="muted">—</span>}
                         {e.snippet ? <div className="muted" style={{ maxWidth: 260 }}>“{e.snippet.slice(0, 120)}{e.snippet.length > 120 ? "…" : ""}”</div> : null}
                       </td>
@@ -135,7 +140,6 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                           value={draft}
                           placeholder={blank ? "type the value from the page" : `type it, or confirm “${e.value_text}”`}
                           onChange={(ev) => setDrafts((d) => ({ ...d, [e.id]: ev.target.value }))}
-                          onFocus={() => showOnPage(e)}
                           onKeyDown={(ev) => {
                             if (ev.key === "Enter") {
                               ev.preventDefault();
@@ -152,7 +156,7 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                             layout; the buttons need their own box. */}
                         <div className="row" style={{ flexWrap: "nowrap" }}>
                           <button className="btn sm primary" disabled={busy === e.id || !draft.trim()} onClick={() => save(e, draft)}>Save</button>
-                          {!blank && <button className="btn sm" disabled={busy === e.id} onMouseEnter={() => showOnPage(e)} onClick={() => { showOnPage(e); confirm(e); }} title="The page shows exactly this">Confirm as is</button>}
+                          {!blank && <button className="btn sm" disabled={busy === e.id} onClick={() => { showOnPage(e); confirm(e); }} title="The page shows exactly this">Confirm as is</button>}
                         </div>
                       </td>
                     </tr>
