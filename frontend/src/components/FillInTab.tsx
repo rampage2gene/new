@@ -49,11 +49,14 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
     if (next) inputs.current[next]?.focus();  // focusing brings its page up; see showOnPage
   };
 
-  /** Bring up the page this value came from, so the caret and the page move
-   *  together. Settling a value used to cost a trip to the page link, a hunt,
-   *  and a trip back for every row; now the page is already open at the right
-   *  spot. That matters for more than speed: the cheapest way through the
-   *  list is no longer to accept readings without ever looking at them. */
+  /** Bring up the page this value came from, so working the list and looking
+   *  at the page are the same gesture. Settling a value used to cost a trip to
+   *  the page link, a hunt, and a trip back, for every row.
+   *
+   *  Every way of touching a row calls this - typing in it, tabbing to it,
+   *  clicking one of its readings, confirming it as it stands - so the page
+   *  on screen is always the page the row came from. It cannot force anyone
+   *  to read it; what it can do is make reading cost nothing. */
   const showOnPage = (e: Entity) => jump(e.page, e.bbox, "primary", e.value_text || e.raw_text);
 
   const reverify = async () => {
@@ -111,7 +114,9 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                   // click in "Read as", where using it is a deliberate act.
                   const draft = drafts[e.id] ?? "";
                   return (
-                    <tr key={e.id} className={blank ? "fill-blank" : undefined}>
+                    // onFocus on the row, not the box: tabbing to a reading
+                    // button or to Confirm as is must bring the page up too.
+                    <tr key={e.id} className={blank ? "fill-blank" : undefined} onFocus={() => showOnPage(e)}>
                       <td>{typeLabel(e.entity_type)}{e.application ? <div className="small muted">{e.application}</div> : null}</td>
                       <td className="small">
                         <a href="#" onClick={(ev) => { ev.preventDefault(); showOnPage(e); }}>p.{e.page}{e.page === page ? " ✓" : ""}</a>
@@ -119,7 +124,7 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                       </td>
                       <td className="small">
                         {readings.length ? readings.map((r) => (
-                          <button key={r} className="btn sm" style={{ marginRight: 4, marginBottom: 2 }} onClick={() => save(e, r)} disabled={busy === e.id} title="Use this reading">{r}</button>
+                          <button key={r} className="btn sm" style={{ marginRight: 4, marginBottom: 2 }} onMouseEnter={() => showOnPage(e)} onClick={() => { showOnPage(e); save(e, r); }} disabled={busy === e.id} title="Use this reading">{r}</button>
                         )) : <span className="muted">—</span>}
                         {e.snippet ? <div className="muted" style={{ maxWidth: 260 }}>“{e.snippet.slice(0, 120)}{e.snippet.length > 120 ? "…" : ""}”</div> : null}
                       </td>
@@ -147,7 +152,7 @@ export default function FillInTab({ doc, jump, page, onChanged }: { doc: Documen
                             layout; the buttons need their own box. */}
                         <div className="row" style={{ flexWrap: "nowrap" }}>
                           <button className="btn sm primary" disabled={busy === e.id || !draft.trim()} onClick={() => save(e, draft)}>Save</button>
-                          {!blank && <button className="btn sm" disabled={busy === e.id} onClick={() => confirm(e)} title="The page shows exactly this">Confirm as is</button>}
+                          {!blank && <button className="btn sm" disabled={busy === e.id} onMouseEnter={() => showOnPage(e)} onClick={() => { showOnPage(e); confirm(e); }} title="The page shows exactly this">Confirm as is</button>}
                         </div>
                       </td>
                     </tr>
