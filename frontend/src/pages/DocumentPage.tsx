@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { openCount } from "../verification";
 import PageViewer from "../components/PageViewer";
 import AssistantPanel from "../components/AssistantPanel";
 import TechnicalDataTab from "../components/TechnicalDataTab";
@@ -45,10 +46,18 @@ export default function DocumentPage() {
 
   const setComponentHighlights = useCallback((hs: Highlight[]) => setHighlights(hs), []);
 
+  // Six tabs do not fit at any width, so the strip scrolls. Bring the active
+  // one into view: arriving from the library's "N to fill in" link used to
+  // land on a tab that was off-screen, with none of the visible tabs marked.
+  const tabStrip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabStrip.current?.querySelector(".active")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [tab, doc]);
+
   const counts = useMemo(() => ({
     data: doc?.stats?.entities ? Object.values(doc.stats.entities).reduce((a, b) => a + b, 0) : 0,
     qc: doc?.stats?.qc_flags || 0,
-    fill: (doc?.stats?.to_fill || 0) + (doc?.stats?.verification?.unverified || 0),
+    fill: doc ? openCount(doc) : 0,  // the same rule the To fill in list uses
     diagram: doc?.structure?.diagram_pages?.length || 0,
   }), [doc]);
 
@@ -71,7 +80,7 @@ export default function DocumentPage() {
           <PageViewer doc={doc} page={page} onPageChange={(p) => { setPage(p); setHighlights((h) => h.filter((x) => x.kind === "component")); }} highlights={highlights} onBlockClick={(b) => setHighlights([{ bbox: b.bbox, kind: "secondary", label: b.block_type }])} />
         </div>
         <div className="viewer-right">
-          <div className="tabs">
+          <div className="tabs" ref={tabStrip}>
             <button className={tab === "assistant" ? "active" : ""} onClick={() => setTab("assistant")}>AI Assistant</button>
             <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>Technical Data<span className="badge count">{counts.data}</span></button>
             <button className={tab === "structure" ? "active" : ""} onClick={() => setTab("structure")}>Structure</button>
@@ -83,7 +92,7 @@ export default function DocumentPage() {
             {tab === "assistant" && <AssistantPanel doc={doc} jump={jump} />}
             {tab === "data" && <TechnicalDataTab doc={doc} jump={jump} />}
             {tab === "structure" && <StructureTab doc={doc} jump={jump} />}
-            {tab === "fill" && <FillInTab doc={doc} jump={jump} onChanged={reload} />}
+            {tab === "fill" && <FillInTab doc={doc} jump={jump} page={page} onChanged={reload} />}
             {tab === "qc" && <QCTab doc={doc} jump={jump} />}
             {tab === "diagram" && <DiagramTab doc={doc} page={page} jump={jump} setHighlights={setComponentHighlights} />}
           </div>

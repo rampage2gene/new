@@ -211,6 +211,8 @@ export interface DiagnosticsInfo {
   ai_model: string | null;
   embedding_provider: string;
   max_upload_mb: number;
+  /** What the inbox folder holds: files waiting, and files it could not read. */
+  inbox?: { folder: string; waiting: number; failed: { name: string; reason: string }[] };
   phone_access?: boolean;
   phone_key_required?: boolean;
   documents: { total: number; ready: number; failed: number };

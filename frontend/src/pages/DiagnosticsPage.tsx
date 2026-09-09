@@ -18,6 +18,12 @@ export default function DiagnosticsPage() {
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
+  /** Show a folder in Explorer/Finder. Outside the desktop app there is no
+   *  file manager to ask, so say where it is instead of doing nothing. */
+  const open = async (path: string) => {
+    if (!(await api.openFolder(path))) setError(`This folder is on the computer running the app: ${path}`);
+  };
+
   const copy = async (what: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -76,15 +82,51 @@ export default function DiagnosticsPage() {
 
       {error && <div className="alert crit">{error}</div>}
 
+      {/* The folders the app uses, with a way to open them. They used to be
+          plain text here and in the library's drop zone, so using one meant
+          copying a path out by hand. */}
+      {info && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Folders</h2>
+          <div className="table-scroll">
+            <table className="doc-table">
+              <tbody>
+                {([
+                  ["Documents and settings", info.data_dir],
+                  ["Exported files", info.exports_dir || null],
+                  ["Inbox — drop files here to have them read", info.inbox?.folder || null],
+                ] as [string, string | null][]).filter(([, path]) => path).map(([label, path]) => (
+                  <tr key={label}>
+                    <th style={{ width: 260, textAlign: "left" }}>{label}</th>
+                    <td className="small mono">{path}</td>
+                    <td style={{ width: 90 }}>
+                      <button className="btn sm" onClick={() => open(path!)}>Open</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {info.inbox && (info.inbox.waiting > 0 || info.inbox.failed.length > 0) && (
+            <div className="small muted" style={{ marginTop: 6 }}>
+              {info.inbox.waiting} file{info.inbox.waiting === 1 ? "" : "s"} waiting to be read
+              {info.inbox.failed.length ? `, ${info.inbox.failed.length} could not be read (in the failed folder)` : ""}.
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="card">
         {info ? (
-          <table className="doc-table">
-            <tbody>
-              {rows.map(([k, v]) => (
-                <tr key={k}><th style={{ width: 180, textAlign: "left" }}>{k}</th><td className="small">{v}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="doc-table">
+              <tbody>
+                {rows.map(([k, v]) => (
+                  <tr key={k}><th style={{ width: 180, textAlign: "left" }}>{k}</th><td className="small">{v}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="empty">Reading diagnostics…</div>
         )}

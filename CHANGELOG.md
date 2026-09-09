@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.1.6 - 2026-09-09
+
+Settling the values the readers could not agree on stops being a chase around
+the screen, and the app finally says how much work is actually left.
+
+- Changed: in **To fill in**, the page image now follows the box you are
+  typing in. Focusing a row brings up its page with the value highlighted,
+  and Enter carries both the caret and the page to the next one. Settling a
+  document's values drops from about 35 actions to 23, and the page you are
+  confirming is always the page in front of you.
+- Fixed: the value box **no longer arrives pre-filled with what the machine
+  read**. Holding Enter used to walk the list stamping unconfirmed readings as
+  confirmed by you. The reading is still one click away under *Read as*, where
+  using it is a deliberate act.
+- Fixed: **"Mark verified" in the Verification tab now verifies the value.**
+  It used to tick the note and leave the value at its machine confidence, so
+  the button in the tab named Verification put an unverified number into every
+  export under your name.
+- Fixed: the **"to fill in" count now counts down to zero** and *all values
+  checked* can appear. The figure was written once when the document was read
+  and never recomputed, so it never moved however much you did.
+- Fixed: a **dropped file, or one taken from the inbox folder, now appears in
+  the library**. It was imported and read correctly, and the screen never said
+  so — indistinguishable from a drop that failed.
+- Added: **one queue across every document** on the library — "8 values to
+  fill in across 2 documents", each with its count and a way straight into it.
+  One definition of that number now feeds every badge, list and total; the tab
+  used to say 6 while its own table listed 11.
+- Added: files the **inbox folder could not read are named on the library**
+  with the reason. They used to move to `inbox\failed\` and vanish.
+- Added: **Folders** on Diagnostics — the data, exports and inbox folders with
+  a button to open each, instead of paths to copy out by hand.
+- Fixed: wide tables were **clipped instead of scrolled** above 860 px, so the
+  Checked column and its tickboxes were off-screen on a desktop. Every table
+  now scrolls inside its own box.
+- Fixed: the tab strip shows that it scrolls and brings the active tab into
+  view — the Diagram tab was invisible at every width.
+- Changed: the library's first screen is shorter (one-line drop zone, exports
+  behind one menu), *to fill in* is amber rather than red because it is normal
+  work rather than a fault, and a value only one reader saw is marked amber
+  instead of neutral grey.
+
 ## v0.1.5 - 2026-09-07
 
 Use the app from your phone. The computer keeps doing all the work; the phone

@@ -61,25 +61,27 @@ export default function ComparePage() {
             </div>
           ))}
           <div className="card" style={{ overflowX: "auto" }}>
-            <table className="compare-table">
-              <thead><tr><th>Specification</th>{res.documents.map((d) => <th key={d.id}>{d.name}<div className="muted" style={{ textTransform: "none", fontWeight: 400 }}>{[d.manufacturer, d.model].filter(Boolean).join(" ")}</div></th>)}</tr></thead>
-              <tbody>
-                {res.table.map((row) => (
-                  <tr key={row.key}>
-                    <td><b>{row.label}</b></td>
-                    {row.cells.map((c) => (
-                      <td key={c.document_id} className="cell">
-                        {c.values.length === 0 ? <span className="muted">not found</span> : c.values.map((e) => (
-                          <a key={e.id} href="#" className="val" onClick={(ev) => { ev.preventDefault(); open(e); }} title={e.snippet}>
-                            <b>{e.value_text}</b>{e.qualifier ? <span className="muted"> {e.qualifier}</span> : null}{e.application ? <span className="muted"> · {e.application}</span> : null} <span className="muted">p.{e.page}</span>
-                          </a>
-                        ))}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="compare-table">
+                <thead><tr><th>Specification</th>{res.documents.map((d) => <th key={d.id}>{d.name}<div className="muted" style={{ textTransform: "none", fontWeight: 400 }}>{[d.manufacturer, d.model].filter(Boolean).join(" ")}</div></th>)}</tr></thead>
+                <tbody>
+                  {res.table.map((row) => (
+                    <tr key={row.key}>
+                      <td><b>{row.label}</b></td>
+                      {row.cells.map((c) => (
+                        <td key={c.document_id} className="cell">
+                          {c.values.length === 0 ? <span className="muted">not found</span> : c.values.map((e) => (
+                            <a key={e.id} href="#" className="val" onClick={(ev) => { ev.preventDefault(); open(e); }} title={e.snippet}>
+                              <b>{e.value_text}</b>{e.qualifier ? <span className="muted"> {e.qualifier}</span> : null}{e.application ? <span className="muted"> · {e.application}</span> : null} <span className="muted">p.{e.page}</span>
+                            </a>
+                          ))}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="small muted" style={{ marginTop: 8 }}>{res.note}</p>
           </div>
           <div className="card">

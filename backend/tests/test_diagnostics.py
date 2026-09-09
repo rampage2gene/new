@@ -64,3 +64,17 @@ def test_unsupported_upload_is_logged_and_rejected(client, tmp_path, caplog):
             resp = client.post("/api/documents", files=[("files", (junk.name, f, "text/plain"))])
     assert resp.status_code == 415
     assert "notes.txt" in " ".join(r.getMessage() for r in caplog.records)
+
+
+def test_diagnostics_reports_a_file_the_inbox_could_not_read(client, data_dir):
+    """A file that fails moves to inbox/failed/ with a reason; before this the
+    app never read that folder, so the file just vanished from the user's
+    point of view."""
+    failed = data_dir / "inbox" / "failed"
+    failed.mkdir(parents=True, exist_ok=True)
+    (failed / "broken.pdf").write_bytes(b"not really a pdf")
+    (failed / "broken.pdf.error.txt").write_text("unsupported file type. Upload a PDF or an image.\n", encoding="utf-8")
+
+    inbox = client.get("/api/diagnostics").json()["inbox"]
+    assert inbox["folder"].endswith("inbox")
+    assert {"name": "broken.pdf", "reason": "unsupported file type. Upload a PDF or an image."} in inbox["failed"]

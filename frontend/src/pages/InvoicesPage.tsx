@@ -41,17 +41,19 @@ export default function InvoicesPage() {
                   <div className="result-value">{money(inv.total, inv.currency)}</div>
                 </div>
               </div>
-              <table className="small" style={{ marginTop: 8 }}>
-                <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit price</th><th>Total</th><th>Conf.</th></tr></thead>
-                <tbody>
-                  {inv.line_items.map((li, i) => (
-                    <tr key={i} className="clickable" onClick={() => navigate(`/documents/${inv.document_id}?page=${li.page}&bbox=${li.bbox.map((n) => Math.round(n)).join(",")}`)}>
-                      <td>{li.description}</td><td>{li.quantity ?? "—"}</td><td>{li.unit || ""}</td><td>{money(li.unit_price, inv.currency)}</td><td>{money(li.total, inv.currency)}</td><td><span className={`badge ${li.confidence >= 0.9 ? "ok" : li.confidence >= 0.7 ? "warn" : "crit"}`}>{Math.round(li.confidence * 100)}%</span></td>
-                    </tr>
-                  ))}
-                  {inv.line_items.length === 0 && <tr><td colSpan={6} className="muted">No line items recognised.</td></tr>}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="small" style={{ marginTop: 8 }}>
+                  <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit price</th><th>Total</th><th>Conf.</th></tr></thead>
+                  <tbody>
+                    {inv.line_items.map((li, i) => (
+                      <tr key={i} className="clickable" onClick={() => navigate(`/documents/${inv.document_id}?page=${li.page}&bbox=${li.bbox.map((n) => Math.round(n)).join(",")}`)}>
+                        <td>{li.description}</td><td>{li.quantity ?? "—"}</td><td>{li.unit || ""}</td><td>{money(li.unit_price, inv.currency)}</td><td>{money(li.total, inv.currency)}</td><td><span className={`badge ${li.confidence >= 0.9 ? "ok" : li.confidence >= 0.7 ? "warn" : "crit"}`}>{Math.round(li.confidence * 100)}%</span></td>
+                      </tr>
+                    ))}
+                    {inv.line_items.length === 0 && <tr><td colSpan={6} className="muted">No line items recognised.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </>

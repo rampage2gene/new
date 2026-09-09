@@ -206,13 +206,15 @@ export default function CalculatorsPage() {
             ))}
             {result.warnings.length > 0 && <div className="alert warn"><b>Warnings</b><ul className="plain">{result.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
             <h4>Inputs</h4>
-            <table className="small">
-              <tbody>
-                {Object.entries(result.inputs).filter(([, v]) => v.value != null && v.value !== "").map(([k, v]) => (
-                  <tr key={k}><td className="muted">{spec?.inputs.find((i) => i.key === k)?.label || k}</td><td><b>{String(v.value)}</b> {v.unit}</td><td>{v.source ? <SourceTag src={v.source} /> : <span className="muted">{v.origin === "default" ? "default" : "entered by user"}</span>}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="small">
+                <tbody>
+                  {Object.entries(result.inputs).filter(([, v]) => v.value != null && v.value !== "").map(([k, v]) => (
+                    <tr key={k}><td className="muted">{spec?.inputs.find((i) => i.key === k)?.label || k}</td><td><b>{String(v.value)}</b> {v.unit}</td><td>{v.source ? <SourceTag src={v.source} /> : <span className="muted">{v.origin === "default" ? "default" : "entered by user"}</span>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <h4 style={{ marginTop: 10 }}>Calculation</h4>
             <ol className="steps">{result.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
             <h4 style={{ marginTop: 10 }}>Assumptions</h4>

@@ -116,7 +116,11 @@ mark { background: var(--hl); padding: 0 1px; border-radius: 2px; }
 .block-hit { position: absolute; cursor: pointer; }
 .block-hit:hover { outline: 1px dashed var(--accent); background: rgba(11,95,165,0.05); }
 
-.tabs { display: flex; border-bottom: 1px solid var(--border); background: #fff; overflow-x: auto; }
+/* The strip scrolls when the tabs do not fit, which they never quite do.
+   Fade its right edge so a clipped strip reads as "there is more" rather than
+   as the end of the list - Diagram was simply invisible before this. */
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: #fff; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button { border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .tabs button .count { margin-left: 5px; }
@@ -248,3 +252,9 @@ ol.steps-plain { padding-left: 20px; margin: 6px 0 14px; } ol.steps-plain li { m
   .dropzone { padding: 16px; }
   .phone-pair .qr { width: 100%; height: auto; }
 }
+
+/* The queue of outstanding work on the library: a list, not a table of data,
+   so it drops its borders and keeps the rows tight. */
+.queue-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.queue-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--border); }
+.queue-list li:hover { background: var(--accent-soft); }

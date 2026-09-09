@@ -55,21 +55,23 @@ export default function AnswerView({ answer, onCitation, onEntity, showDocumentN
       {answer.entities?.length > 0 && (
         <details style={{ marginTop: 8 }}>
           <summary className="small muted">Documented values used ({answer.entities.length})</summary>
-          <table className="small">
-            <thead><tr><th>Type</th><th>Value</th><th>Qualifier</th><th>Application</th><th>Source</th><th></th></tr></thead>
-            <tbody>
-              {answer.entities.slice(0, 20).map((e) => (
-                <tr key={e.id} className="clickable" onClick={() => onEntity?.(e)}>
-                  <td>{e.entity_type.replace(/_/g, " ")}</td>
-                  <td><b>{e.value_text}</b>{e.flags?.some((f) => f.severity === "critical") && <span className="badge crit" style={{ marginLeft: 4 }}>verify</span>}</td>
-                  <td>{e.qualifier || "—"}</td>
-                  <td>{e.application || "—"}</td>
-                  <td>{showDocumentNames && e.document_name ? `${e.document_name}, ` : ""}p.{e.page}</td>
-                  <td onClick={(ev) => ev.stopPropagation()}><SendToCalculator entity={e} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="small">
+              <thead><tr><th>Type</th><th>Value</th><th>Qualifier</th><th>Application</th><th>Source</th><th></th></tr></thead>
+              <tbody>
+                {answer.entities.slice(0, 20).map((e) => (
+                  <tr key={e.id} className="clickable" onClick={() => onEntity?.(e)}>
+                    <td>{e.entity_type.replace(/_/g, " ")}</td>
+                    <td><b>{e.value_text}</b>{e.flags?.some((f) => f.severity === "critical") && <span className="badge crit" style={{ marginLeft: 4 }}>verify</span>}</td>
+                    <td>{e.qualifier || "—"}</td>
+                    <td>{e.application || "—"}</td>
+                    <td>{showDocumentNames && e.document_name ? `${e.document_name}, ` : ""}p.{e.page}</td>
+                    <td onClick={(ev) => ev.stopPropagation()}><SendToCalculator entity={e} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </details>
       )}
     </div>

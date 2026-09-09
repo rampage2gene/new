@@ -33,6 +33,31 @@ def log_path() -> Path:
     return get_settings().data_dir / "logs" / "app.log"
 
 
+def _inbox_state() -> dict:
+    """What the inbox folder is holding, so the app can say it out loud.
+
+    A file the app cannot read is moved to `inbox/failed/` beside a
+    `.error.txt` giving the reason. Nothing used to read that folder, so from
+    the user's side the file simply vanished - on the very route the library
+    recommends when drag-and-drop has already let them down.
+    """
+    from ..ingest.inbox import inbox_dir
+
+    root = inbox_dir()
+    failed: list[dict] = []
+    try:
+        for note in sorted((root / "failed").glob("*.error.txt")):
+            reason = note.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+            failed.append({"name": note.name[: -len(".error.txt")], "reason": reason[0] if reason else "no reason recorded"})
+    except OSError:  # the folder is only created on first use
+        pass
+    try:
+        waiting = sum(1 for p in root.glob("*") if p.is_file())
+    except OSError:
+        waiting = 0
+    return {"folder": str(root), "waiting": waiting, "failed": failed}
+
+
 def _tesseract() -> tuple[str | None, str | None]:
     exe = shutil.which("tesseract")
     if not exe:
@@ -68,6 +93,7 @@ def diagnostics(db: Session = Depends(get_db)) -> dict:
         "ocr_engine": get_ocr_engine().name,
         "ocr_engines": engine_status(),
         "exports_dir": str(s.exports_dir),
+        "inbox": _inbox_state(),
         "tesseract_path": exe,
         "tesseract_version": version,
         "ai_available": ai_available(),

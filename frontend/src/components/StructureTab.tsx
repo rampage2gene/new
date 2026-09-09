@@ -7,18 +7,20 @@ export default function StructureTab({ doc, jump }: { doc: DocumentDetail; jump:
     <div>
       <div className="card tight">
         <h4>Document</h4>
-        <table className="small">
-          <tbody>
-            <tr><td className="muted">Title</td><td>{doc.title}</td></tr>
-            <tr><td className="muted">Manufacturer</td><td>{doc.manufacturer || "—"}</td></tr>
-            <tr><td className="muted">Product</td><td>{doc.product || "—"}</td></tr>
-            <tr><td className="muted">Model</td><td>{doc.model_number || "—"}</td></tr>
-            <tr><td className="muted">Type</td><td>{doc.document_type || "—"}</td></tr>
-            <tr><td className="muted">Revision / date</td><td>{[doc.revision, doc.publication_date].filter(Boolean).join(" · ") || "—"}</td></tr>
-            <tr><td className="muted">Equipment</td><td>{doc.equipment_types.join(", ") || "—"}</td></tr>
-            <tr><td className="muted">Pages</td><td>{doc.page_count} ({doc.embedded_text_pages} embedded text, {doc.ocr_pages} OCR{doc.stats?.avg_ocr_confidence != null ? `, avg OCR confidence ${Math.round(doc.stats.avg_ocr_confidence * 100)}%` : ""})</td></tr>
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="small">
+            <tbody>
+              <tr><td className="muted">Title</td><td>{doc.title}</td></tr>
+              <tr><td className="muted">Manufacturer</td><td>{doc.manufacturer || "—"}</td></tr>
+              <tr><td className="muted">Product</td><td>{doc.product || "—"}</td></tr>
+              <tr><td className="muted">Model</td><td>{doc.model_number || "—"}</td></tr>
+              <tr><td className="muted">Type</td><td>{doc.document_type || "—"}</td></tr>
+              <tr><td className="muted">Revision / date</td><td>{[doc.revision, doc.publication_date].filter(Boolean).join(" · ") || "—"}</td></tr>
+              <tr><td className="muted">Equipment</td><td>{doc.equipment_types.join(", ") || "—"}</td></tr>
+              <tr><td className="muted">Pages</td><td>{doc.page_count} ({doc.embedded_text_pages} embedded text, {doc.ocr_pages} OCR{doc.stats?.avg_ocr_confidence != null ? `, avg OCR confidence ${Math.round(doc.stats.avg_ocr_confidence * 100)}%` : ""})</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <h4>Outline</h4>
       {s.sections?.length ? (
@@ -47,9 +49,11 @@ export default function StructureTab({ doc, jump }: { doc: DocumentDetail; jump:
             <div key={i} className="card tight" style={{ cursor: "pointer" }} onClick={() => jump(t.page, t.bbox, "secondary")}>
               <div className="small muted">Page {t.page}{t.section ? ` · ${t.section}` : ""}</div>
               <div style={{ overflowX: "auto" }}>
-                <table className="small">
-                  <tbody>{t.rows.slice(0, 12).map((r, ri) => <tr key={ri}>{r.map((c, ci) => ri === 0 ? <th key={ci}>{c}</th> : <td key={ci}>{c}</td>)}</tr>)}</tbody>
-                </table>
+                <div className="table-scroll">
+                  <table className="small">
+                    <tbody>{t.rows.slice(0, 12).map((r, ri) => <tr key={ri}>{r.map((c, ci) => ri === 0 ? <th key={ci}>{c}</th> : <td key={ci}>{c}</td>)}</tr>)}</tbody>
+                  </table>
+                </div>
                 {t.rows.length > 12 && <div className="small muted">… {t.rows.length - 12} more rows</div>}
               </div>
             </div>

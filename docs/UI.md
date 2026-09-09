@@ -40,6 +40,14 @@ Interactive targets are **at least 32 px high on a desktop pointer and 40 px
 on a touch screen or below 860 px wide**. `.btn.sm` is the smallest allowed
 control and only inside a dense table row.
 
+Nothing that carries meaning is set below **12 px**, and nothing at all below
+11 px. `.tag` sat at 10 px while carrying the whole confidence ladder.
+
+The stylesheet still holds around thirty spacing values off this scale,
+inherited from before it was written. `ui-check` reports them as warnings, not
+errors: they are normalised as each rule is next touched, not in one sweep
+that would move every screen at once.
+
 ## 3. Components
 
 Use what exists before inventing:
@@ -85,6 +93,10 @@ Tables carry the technical data, so they get their own rules:
   (`tr.fill-blank`), not by colouring individual cells.
 - A blank value renders as `—` with `.muted`, never as an empty cell.
 
+**Anything that scrolls sideways must show that it does** — an edge fade, a
+shadow, something. A clipped tab strip is indistinguishable from the end of
+the list, which is how the Diagram tab spent a release being invisible.
+
 ## 6. Confidence, and never guessing
 
 The whole product rests on this, so it is a UI rule, not a data rule:
@@ -98,6 +110,20 @@ The whole product rests on this, so it is a UI rule, not a data rule:
 
 Nothing in the interface may present a machine reading with the same weight as
 a human confirmation, and no number may appear without a route to its page.
+
+Two rules follow, both learned the hard way:
+
+- **An input is never pre-filled with what the machine read.** A box already
+  holding a reading turns "press Enter" into recording that reading as the
+  user's own. Offer it as a click beside the box instead.
+- **One queue, one definition.** How many values are still waiting is decided
+  in exactly one place — `frontend/src/verification.ts` and, on the server,
+  `_refresh_counts` — and every badge, list and total uses it. The tab once
+  said 6 while its own table listed 11.
+
+*to fill in* is `--warn`, not `--crit`: values waiting for you are the normal
+day's work. `--crit` stays for what is actually wrong, or it stops meaning
+anything.
 
 ## 7. Responsive
 

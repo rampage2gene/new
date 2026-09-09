@@ -57,16 +57,18 @@ export default function TechnicalDataTab({ doc, jump }: { doc: DocumentDetail; j
                   </tbody>
                 </table>
               ) : (
-                <table>
-                  <thead>
-                    <tr>{g.key === "electrical_ratings" || g.key === "installation_requirements" ? <th>Type</th> : null}<th>Value</th><th>Qualifier</th><th>Application / Equipment</th><th>Source</th><th>Conf.</th><th>Checked</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {(items as Entity[]).map((e) => (
-                      <EntityRow key={e.id} entity={e} showType={g.key === "electrical_ratings" || g.key === "installation_requirements"} onJump={(x) => jump(x.page, x.bbox, "primary", x.value_text)} onChange={replace} />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>{g.key === "electrical_ratings" || g.key === "installation_requirements" ? <th>Type</th> : null}<th>Value</th><th>Qualifier</th><th>Application / Equipment</th><th>Source</th><th>Conf.</th><th>Checked</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {(items as Entity[]).map((e) => (
+                        <EntityRow key={e.id} entity={e} showType={g.key === "electrical_ratings" || g.key === "installation_requirements"} onJump={(x) => jump(x.page, x.bbox, "primary", x.value_text)} onChange={replace} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )
             )}
           </div>

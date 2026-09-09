@@ -67,30 +67,34 @@ export default function DiagramTab({ doc, page, jump, setHighlights }: { doc: Do
           </div>
           {result.notes?.map((n, i) => <div key={i} className="alert info">{n}</div>)}
           <h4>Components ({result.components.length})</h4>
-          <table className="small">
-            <thead><tr><th>Id</th><th>Type</th><th>Label</th><th>Rating (as printed)</th><th>Confidence</th></tr></thead>
-            <tbody>
-              {result.components.map((c) => (
-                <tr key={c.id} className="clickable" onClick={() => { if (c.bbox_pct && meta) { const [x0, y0, x1, y1] = c.bbox_pct; jump(page, [(x0 / 100) * meta.width, (y0 / 100) * meta.height, (x1 / 100) * meta.width, (y1 / 100) * meta.height], "primary", c.label); } }}>
-                  <td className="mono">{c.id}</td><td>{c.type.replace(/_/g, " ")}</td><td>{c.label}</td><td>{c.rating || "—"}</td><td className={`conf-${c.confidence}`}>{c.confidence}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <h4 style={{ marginTop: 10 }}>Connections ({result.connections.length})</h4>
-          {result.connections.length === 0 ? <p className="small muted">No connections asserted{result.engine === "heuristic" ? " (visual engine not available)" : ""}.</p> : (
+          <div className="table-scroll">
             <table className="small">
-              <thead><tr><th>From</th><th>To</th><th>Polarity</th><th>Circuit</th><th>Flow</th><th>Protection</th><th>Confidence</th></tr></thead>
+              <thead><tr><th>Id</th><th>Type</th><th>Label</th><th>Rating (as printed)</th><th>Confidence</th></tr></thead>
               <tbody>
-                {result.connections.map((c, i) => (
-                  <tr key={i}>
-                    <td className="mono">{c.from_id}</td><td className="mono">{c.to_id}</td><td>{c.polarity.replace(/_/g, " ")}</td><td>{c.circuit}</td><td>{c.direction.replace(/_/g, " ")}</td>
-                    <td>{c.protection.map((p, j) => <span key={j}>{p.type}{p.rating ? ` ${p.rating}` : ""} <span className={`conf-${p.confidence}`}>({p.confidence})</span>{j < c.protection.length - 1 ? ", " : ""}</span>) || "—"}</td>
-                    <td className={`conf-${c.confidence}`}>{c.confidence}{c.note ? <div className="muted">{c.note}</div> : null}</td>
+                {result.components.map((c) => (
+                  <tr key={c.id} className="clickable" onClick={() => { if (c.bbox_pct && meta) { const [x0, y0, x1, y1] = c.bbox_pct; jump(page, [(x0 / 100) * meta.width, (y0 / 100) * meta.height, (x1 / 100) * meta.width, (y1 / 100) * meta.height], "primary", c.label); } }}>
+                    <td className="mono">{c.id}</td><td>{c.type.replace(/_/g, " ")}</td><td>{c.label}</td><td>{c.rating || "—"}</td><td className={`conf-${c.confidence}`}>{c.confidence}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+          <h4 style={{ marginTop: 10 }}>Connections ({result.connections.length})</h4>
+          {result.connections.length === 0 ? <p className="small muted">No connections asserted{result.engine === "heuristic" ? " (visual engine not available)" : ""}.</p> : (
+            <div className="table-scroll">
+              <table className="small">
+                <thead><tr><th>From</th><th>To</th><th>Polarity</th><th>Circuit</th><th>Flow</th><th>Protection</th><th>Confidence</th></tr></thead>
+                <tbody>
+                  {result.connections.map((c, i) => (
+                    <tr key={i}>
+                      <td className="mono">{c.from_id}</td><td className="mono">{c.to_id}</td><td>{c.polarity.replace(/_/g, " ")}</td><td>{c.circuit}</td><td>{c.direction.replace(/_/g, " ")}</td>
+                      <td>{c.protection.map((p, j) => <span key={j}>{p.type}{p.rating ? ` ${p.rating}` : ""} <span className={`conf-${p.confidence}`}>({p.confidence})</span>{j < c.protection.length - 1 ? ", " : ""}</span>) || "—"}</td>
+                      <td className={`conf-${c.confidence}`}>{c.confidence}{c.note ? <div className="muted">{c.note}</div> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {result.unreadable_regions?.length ? <div className="alert warn"><b>Unreadable / ambiguous:</b><ul className="plain">{result.unreadable_regions.map((u, i) => <li key={i}>{u}</li>)}</ul></div> : null}
         </div>

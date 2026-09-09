@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatBytes, isPhone } from "../api";
 import type { DiagnosticsInfo, DocumentSummary } from "../types";
+import { openCount } from "../verification";
 
 /** A photographed page, waiting to be sent with the rest of the document. */
 type Shot = { file: File; url: string };
@@ -13,6 +14,8 @@ export default function LibraryPage() {
   const [shots, setShots] = useState<Shot[]>([]);
   const [scanName, setScanName] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [hidFailures, setHidFailures] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<DocumentSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -197,6 +200,14 @@ export default function LibraryPage() {
     setFolderNote(ok ? null : `The exports are in: ${dir}`);
   };
 
+  const openInbox = async () => {
+    const folder = info?.inbox?.folder;
+    if (!folder) return;
+    const failed = `${folder}${folder.includes("\\") ? "\\" : "/"}failed`;
+    const ok = await api.openFolder(failed);
+    if (!ok) setFolderNote(`The files are in: ${failed}`);
+  };
+
   const copyReport = async () => {
     if (!report) return;
     try {
@@ -207,6 +218,12 @@ export default function LibraryPage() {
       /* the text is on screen; the user can select it */
     }
   };
+
+  /** The work outstanding across the whole library, most first. */
+  const queue = useMemo(() => {
+    const withWork = docs.filter((d) => d.status === "ready" && openCount(d) > 0).sort((a, b) => openCount(b) - openCount(a));
+    return { docs: withWork, total: withWork.reduce((n, d) => n + openCount(d), 0) };
+  }, [docs]);
 
   const remove = async (d: DocumentSummary) => {
     // Name what is actually lost: the values the user typed are the part that
@@ -226,9 +243,22 @@ export default function LibraryPage() {
           <p>Upload manuals, datasheets, wiring diagrams, scans, photos, invoices and parts lists. Each file is read, OCR'd if needed, structured, indexed and checked.</p>
         </div>
         <div className="row">
-          <a className="btn" href={api.exportWorkbookUrl()} title="One Excel file: every extracted value with a link to its page, detected tables, calculator sheets prefilled from the documents with live formulas, and invoice totals">Export workbook (.xlsx, formulas)</a>
-          <a className="btn" href={api.exportEntitiesUrl("xlsx")}>Values only (.xlsx)</a>
-          <Link className="btn" to="/convert">Convert files</Link>
+          <div style={{ position: "relative" }}>
+            <button className="btn" onClick={() => setExportOpen((o) => !o)} aria-expanded={exportOpen}>Export ▾</button>
+            {exportOpen && (
+              <div className="menu" onMouseLeave={() => setExportOpen(false)}>
+                <div className="menu-title">Every document</div>
+                <a className="menu-item" href={api.exportWorkbookUrl()} onClick={() => setExportOpen(false)}>
+                  Workbook (.xlsx)
+                  <span className="small muted">Values with page links, tables, calculators with live formulas, invoices</span>
+                </a>
+                <a className="menu-item" href={api.exportEntitiesUrl("xlsx")} onClick={() => setExportOpen(false)}>
+                  Values only (.xlsx)
+                  <span className="small muted">One row per value, with how it was checked</span>
+                </a>
+              </div>
+            )}
+          </div>
           {CAN_SCAN && (
             <button className="btn" onClick={() => cameraRef.current?.click()} disabled={scanning} title="Photograph the pages one by one; they become a single document">
               Scan with the camera
@@ -274,14 +304,52 @@ export default function LibraryPage() {
       >
         {uploading
           ? `Uploading…${progress == null ? "" : ` ${progress}%`}`
-          : "Drop PDF or image files here, or click to choose. Scanned PDFs and photographs are OCR'd automatically."}
-        {!uploading && info && (
-          <div className="small muted" style={{ marginTop: 6 }}>
-            Every processed document also gets a folder in <code>{info.exports_dir || `${info.data_dir.replace(/[\\/]$/, "")}${info.platform.toLowerCase().startsWith("windows") ? "\\" : "/"}exports`}</code> with the OCR'd PDF, a clean text PDF for an AI, an Excel workbook, CSV, JSON and text.
-            No luck with drag-and-drop? Copy files into the inbox folder instead: <code>{info.data_dir.replace(/[\\/]$/, "")}{info.platform.toLowerCase().startsWith("windows") ? "\\" : "/"}inbox</code>; the same files appear in its <code>done</code> subfolder.
-          </div>
-        )}
+          : "Drop PDF or image files here, or click to choose. Scanned PDFs and photographs are read automatically."}
       </div>
+      {/* Files the inbox folder could not read used to move to inbox/failed/
+          and vanish: nothing in the app read that folder. Say it here, where
+          the user is looking for the document that never arrived. */}
+      {!hidFailures && info?.inbox?.failed?.length ? (
+        <div className="alert crit">
+          <b>{info.inbox.failed.length} file{info.inbox.failed.length === 1 ? "" : "s"} in the inbox folder could not be read</b>
+          <ul className="plain" style={{ marginTop: 4 }}>
+            {info.inbox.failed.slice(0, 5).map((f) => (
+              <li key={f.name}><b>{f.name}</b> — {f.reason}</li>
+            ))}
+          </ul>
+          <div className="row" style={{ marginTop: 6 }}>
+            <button className="btn sm" onClick={() => openInbox()}>Open the failed folder</button>
+            <button className="btn sm" onClick={() => setHidFailures(true)}>Dismiss</button>
+            <span className="small muted">The files stay where they are; try them with <b>Upload documents</b>.</span>
+          </div>
+        </div>
+      ) : null}
+      {/* One queue across every document. Without it the only way to know what
+          is left is to open each document in turn and add up in your head -
+          and the app already has every number on this page. */}
+      {queue.total > 0 ? (
+        <div className="card">
+          <div className="row">
+            <b className="grow">{queue.total} value{queue.total === 1 ? "" : "s"} to fill in across {queue.docs.length} document{queue.docs.length === 1 ? "" : "s"}</b>
+            <Link className="btn primary sm" to={`/documents/${queue.docs[0].id}?tab=fill`}>Start filling in</Link>
+          </div>
+          <div className="small muted">Values two readers disagreed on, or that only one reader could see. Nothing here was guessed.</div>
+          {/* Rows that wrap rather than a table: on a phone a table put the
+              count and the button off the right edge, which is the whole
+              point of the card. */}
+          <ul className="queue-list">
+            {queue.docs.map((d) => (
+              <li key={d.id}>
+                <span className="grow">{d.title}</span>
+                <span className="badge warn">{openCount(d)} to fill in</span>
+                <Link className="btn sm" to={`/documents/${d.id}?tab=fill`}>Fill in →</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : docs.some((d) => d.status === "ready") ? (
+        <div className="alert ok">Nothing to fill in — every value was confirmed by two readers or by you.</div>
+      ) : null}
       {folderNote && <div className="alert info">{folderNote} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setFolderNote(null)}>OK</button></div>}
       {error && (
         <div className="alert crit">
@@ -320,14 +388,16 @@ export default function LibraryPage() {
                   <td>{d.page_count || "—"}{d.ocr_pages ? <div className="small muted">{d.ocr_pages} OCR</div> : null}</td>
                   <td className="small">
                     {d.stats?.entities ? Object.values(d.stats.entities).reduce((a, b) => a + b, 0) + " values" : "—"}
-                    {d.status === "ready" && (d.stats?.to_fill || d.stats?.verification?.unverified) ? (
+                    {d.status === "ready" && openCount(d) > 0 ? (
                       <div>
-                        <Link to={`/documents/${d.id}?tab=fill`} className="badge crit" title="Values the readers could not settle: fill them in or confirm them from the page">
-                          {(d.stats.to_fill || 0) + (d.stats.verification?.unverified || 0)} to fill in
+                        {/* warn, not crit: values waiting for you are the normal
+                            day's work, not a fault. Red is kept for wrong. */}
+                        <Link to={`/documents/${d.id}?tab=fill`} className="badge warn" title="Values the readers could not settle: fill them in or confirm them from the page">
+                          {openCount(d)} to fill in
                         </Link>
                       </div>
                     ) : null}
-                    {d.status === "ready" && d.stats?.verification && !d.stats.to_fill && !d.stats.verification.unverified && d.stats.verification.checked > 0 ? (
+                    {d.status === "ready" && d.stats?.verification && openCount(d) === 0 && d.stats.verification.checked > 0 ? (
                       <div><span className="badge ok" title="Every scanned value was read the same way by two readers or confirmed by you">all values checked</span></div>
                     ) : null}
                     {d.stats?.critical_flags ? <div><span className="badge crit">{d.stats.critical_flags} to verify</span></div> : null}
