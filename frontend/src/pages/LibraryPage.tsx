@@ -32,7 +32,7 @@ export default function LibraryPage() {
   // `mdi:dropped` event follows, so a drop never silently vanishes.
   const heldDrop = useRef<{ files: File[]; timer: number } | null>(null);
   useEffect(() => { api.diagnostics().then(setInfo).catch(() => setInfo(null)); }, []);
-  const refresh = useCallback(() => api.listDocuments().then(setDocs).catch((e) => setError(e.message)), []);
+  const refresh = useCallback(() => api.listDocuments().then((d) => { setDocs(d); setError(null); }).catch((e) => setError(e.message)), []);
   useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
@@ -53,9 +53,11 @@ export default function LibraryPage() {
     // Files copied into the inbox folder are read while the app is in the
     // background; look again when the user comes back to it.
     window.addEventListener("focus", refresh);
+    window.addEventListener("mdi:server-back", refresh);
     return () => {
       window.removeEventListener("mdi:dropped", cancelHold);
       window.removeEventListener("focus", refresh);
+      window.removeEventListener("mdi:server-back", refresh);
     };
   }, [refresh]);
   const busy = docs.some((d) => d.status === "queued" || d.status === "processing");

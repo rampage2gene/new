@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, formatBytes } from "../api";
+import StopApp from "../components/StopApp";
 import type { DiagnosticsInfo } from "../types";
 
 /** Everything needed to explain a failure, in one place with a copy button.
@@ -16,7 +17,11 @@ export default function DiagnosticsPage() {
     api.diagnostics().then(setInfo).catch((e) => setError(e.message));
     api.logs(800).then(setLog).catch(() => setLog(""));
   }, []);
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    window.addEventListener("mdi:server-back", refresh);
+    return () => window.removeEventListener("mdi:server-back", refresh);
+  }, [refresh]);
 
   /** Show a folder in Explorer/Finder. Outside the desktop app there is no
    *  file manager to ask, so say where it is instead of doing nothing. */
@@ -128,10 +133,11 @@ export default function DiagnosticsPage() {
             </table>
           </div>
         ) : (
-          <div className="empty">Reading diagnostics…</div>
+          <div className="empty">{error ? "Diagnostics cannot be read while the app is not answering." : "Reading diagnostics…"}</div>
         )}
       </div>
 
+      <StopApp card />
       <div className="card" style={{ marginTop: 14 }}>
         <h2 style={{ marginTop: 0 }}>Application log</h2>
         {log ? (

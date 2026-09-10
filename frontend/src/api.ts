@@ -101,11 +101,30 @@ async function serverAnswers(): Promise<boolean> {
   }
 }
 
+/** After the server has been found missing, ask every few seconds whether it
+ *  is back, and tell the pages when it is (`mdi:server-back`) so the error
+ *  clears and the lists reload without anyone pressing anything. */
+let watching = false;
+function watchForReturn(): void {
+  if (watching) return;
+  watching = true;
+  const tick = async () => {
+    if (await serverAnswers()) {
+      watching = false;
+      window.dispatchEvent(new CustomEvent("mdi:server-back"));
+    } else {
+      setTimeout(tick, 4000);
+    }
+  };
+  setTimeout(tick, 4000);
+}
+
 /** What to tell the user when a request never completed. `sending` names the
  *  file that was on its way, when there was one: with the server alive, a
  *  send that died mid-way means the file itself stopped being readable. */
 async function explainNetworkFailure(sending?: string): Promise<string> {
   if (await serverAnswers()) return sending ? UNREADABLE(sending) : INTERRUPTED;
+  watchForReturn();
   return isPhone() ? PHONE_LOST : NOT_RUNNING(knownLogPath());
 }
 
