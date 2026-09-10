@@ -32,3 +32,6 @@ frontend/tsconfig.tsbuildinfo
 build/
 dist/
 frontend/.ui-shots/
+
+# downloaded by CI for the Windows installer
+desktop/windows/MicrosoftEdgeWebview2Setup.exe

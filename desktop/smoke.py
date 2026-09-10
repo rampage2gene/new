@@ -151,6 +151,21 @@ def _exports_ok(folder: str | None) -> bool:
     return any(n.endswith(".xlsx") for n in names) and any(n.endswith(".clean.pdf") for n in names)
 
 
+def quit_and_wait(base: str, proc: subprocess.Popen) -> dict:
+    """"Stop the app" on the page: the server answers 204 and the process ends
+    within ten seconds. In a browser tab this button is the only way to stop
+    the app, so it has to work on every platform."""
+    req = urllib.request.Request(base + "/api/quit", method="POST")
+    with urllib.request.urlopen(req, timeout=5) as r:
+        code = r.status
+    started = time.time()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        return {"code": code, "exited": False, "seconds": round(time.time() - started, 1)}
+    return {"code": code, "exited": True, "seconds": round(time.time() - started, 1), "returncode": proc.returncode}
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -172,6 +187,7 @@ def main() -> int:
     inbox_out = None
     phone: dict | None = None
     scan: dict | None = None
+    quit: dict | None = None
     try:
         while time.time() < deadline:
             if proc.poll() is not None:
@@ -219,6 +235,12 @@ def main() -> int:
                 print(f"camera scan: status={scan.get('status')} pages={scan.get('page_count')} error={scan.get('error')}")
             except Exception as exc:
                 print(f"camera scan failed: {type(exc).__name__}: {exc}")
+            try:
+                quit = quit_and_wait(base, proc)
+                print(f"stop the app: answered {quit.get('code')}, exited={quit.get('exited')} "
+                      f"code={quit.get('returncode')} after {quit.get('seconds')}s")
+            except Exception as exc:
+                print(f"stop the app failed: {type(exc).__name__}: {exc}")
     finally:
         if proc.poll() is None:
             proc.terminate()
@@ -259,6 +281,9 @@ def main() -> int:
     elif not scan or scan.get("status") != "ready" or (scan.get("page_count") or 0) != 2:
         ok = False
         print("FAILED: photographed pages were not processed into a 2-page document")
+    elif not quit or quit.get("code") != 204 or not quit.get("exited") or quit.get("returncode") != 0:
+        ok = False
+        print(f"FAILED: 'Stop the app' (POST /api/quit) did not stop the app cleanly within 10 s: {quit}")
     else:
         print(f"OK: {status}")
         print(f"log file present: {log.exists()}")

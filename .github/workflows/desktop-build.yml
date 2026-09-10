@@ -115,6 +115,8 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
           $version = python desktop/version.py
+          # Bundled so the installer can add the WebView2 runtime on a machine without it.
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile desktop\windows\MicrosoftEdgeWebview2Setup.exe
           & $iscc "/DAppVersion=$version" desktop\windows\installer.iss
           Move-Item dist\MarineDocIntelligence-Setup.exe "${{ matrix.artifact }}-Setup.exe"
 

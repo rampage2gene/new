@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import calculators, convert, diagnostics, documents, entities, entities_edit, exports, lan, search
+from .api import calculators, convert, diagnostics, documents, entities, entities_edit, exports, lan, search, system
 from .config import get_settings
 from .db import init_db
 from .ingest import inbox
@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Marine Electrical Document Intelligence", version=__version__)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     add_access_control(app)
-    for r in (documents.router, entities.router, entities_edit.router, search.router, calculators.router, exports.router, convert.router, diagnostics.router, lan.router):
+    for r in (documents.router, entities.router, entities_edit.router, search.router, calculators.router, exports.router, convert.router, diagnostics.router, lan.router, system.router):
         app.include_router(r)
     if settings.inbox_watcher:
         inbox.start_watcher()

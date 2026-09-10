@@ -152,6 +152,15 @@ Test widths: **360** (phone), **768** (tablet), **1440** (desktop).
 - No jargon from the codebase in the UI: no "entity", "ingest", "QC flag",
   "pipeline". Say value, add, check.
 - Errors name the file and the likely cause, and end with what to do.
+- An error never guesses between causes the app could tell apart. "Failed to
+  fetch" has three honest readings - the app is gone, the phone lost the PC,
+  the file stopped being readable - and one three-second question to the
+  server separates them. Never send the user to a page that cannot answer
+  either (Diagnostics, when the server is the thing that is missing): name the
+  log's path instead, remembered from the last time it could be asked.
+- A control that stops or destroys something asks first and says what stops.
+  It is never the only control on screen, and never the default button of a
+  dialog: a box whose one button reads "OK" must do nothing but close.
 - Sentence case for buttons and headings. No exclamation marks.
 - Units and technical notation exactly as the document writes them: `4/0 AWG`,
   `mm²`, `300 A Class T`.

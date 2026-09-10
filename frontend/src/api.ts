@@ -62,15 +62,52 @@ const UNREADABLE = (name: string) =>
   `is inside a zip or an email preview, is still downloading, or is open in another program. ` +
   `Copy it to a normal folder such as your Desktop and try again.`;
 
-const NETWORK_FAILED =
-  "The app's built-in server did not answer. If this keeps happening, open Diagnostics in the sidebar to see the log.";
+/** A request that never completed has three honest readings, and the browser
+ *  reports all of them as the same bare "Failed to fetch". So before choosing
+ *  one, the app asks the server a trivial question with a short deadline. */
+const NOT_RUNNING = (logPath: string | null) =>
+  "The app is no longer running, so this page cannot reach it. Start the app again" +
+  (logPath ? `. If this keeps happening, its log is at ${logPath}` : "; if this keeps happening, look at Diagnostics in the sidebar once it is back") +
+  ".";
+const PHONE_LOST =
+  "The phone could not reach the computer. Check that both are on the same Wi-Fi and that the computer is awake with " +
+  "the app running, then try again. A big file needs the phone's screen to stay on while it is sent.";
+const INTERRUPTED = "The connection to the app was interrupted. Try again.";
 
-/** Sending a file has one failure the rest of the API does not: the file itself
- *  can stop being readable halfway through, which looks identical to a dead server. */
-const UPLOAD_FAILED =
-  "The upload did not finish. Either the file became unreadable while it was being sent (a file stored online-only, " +
-  "in a zip, or open in another program), or the app's built-in server stopped answering. " +
-  "Open Diagnostics in the sidebar to see the log.";
+/** Sent by the browser when a request got no answer at all; turned into one of
+ *  the messages above once the app knows whether the server is still there. */
+class NetworkFailure extends Error {}
+
+// The log's location is kept here so it can still be named after the server
+// that would have told us has gone.
+const LOG_PATH_KEY = "mdi.logPath";
+function rememberLogPath(path: string): void {
+  try { localStorage.setItem(LOG_PATH_KEY, path); } catch { /* private window, blocked storage */ }
+}
+function knownLogPath(): string | null {
+  try { return localStorage.getItem(LOG_PATH_KEY); } catch { return null; }
+}
+
+/** Does the server answer at all? Three seconds, one try. */
+async function serverAnswers(): Promise<boolean> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 3000);
+  try {
+    return (await fetch("/api/status", withKey({ signal: ctl.signal }))).ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** What to tell the user when a request never completed. `sending` names the
+ *  file that was on its way, when there was one: with the server alive, a
+ *  send that died mid-way means the file itself stopped being readable. */
+async function explainNetworkFailure(sending?: string): Promise<string> {
+  if (await serverAnswers()) return sending ? UNREADABLE(sending) : INTERRUPTED;
+  return isPhone() ? PHONE_LOST : NOT_RUNNING(knownLogPath());
+}
 
 /** Read the first bytes of every file before sending any of them.
  *  A file that cannot be opened now will fail mid-upload with no useful error. */
@@ -109,9 +146,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, withKey(init));
-  } catch (e: any) {
+  } catch {
     // A network-level failure ("Failed to fetch"): the request never completed.
-    throw new Error(`${NETWORK_FAILED} (${e?.message ?? "network error"})`);
+    throw new Error(await explainNetworkFailure());
   }
   if (!res.ok) {
     let detail = res.statusText;
@@ -160,7 +197,7 @@ function xhrUpload<T>(url: string, fd: FormData, onProgress?: UploadProgress): P
       reject(new Error(detail || `Request failed (${xhr.status})`));
     };
     // status 0 means the request never completed: no response was ever received.
-    xhr.onerror = () => reject(new Error(UPLOAD_FAILED));
+    xhr.onerror = () => reject(new NetworkFailure("the request never completed"));
     xhr.onabort = () => reject(new Error("The upload was cancelled."));
     xhr.send(fd);
   });
@@ -168,7 +205,13 @@ function xhrUpload<T>(url: string, fd: FormData, onProgress?: UploadProgress): P
 
 export const api = {
   status: () => request<Status>("/api/status"),
-  diagnostics: () => request<Diagnostics>("/api/diagnostics"),
+  diagnostics: async () => {
+    const d = await request<Diagnostics>("/api/diagnostics");
+    if (d.log_path) rememberLogPath(d.log_path);
+    return d;
+  },
+  /** Stop the app from its page - the only way to when it runs in a browser tab. */
+  quit: () => request<void>("/api/quit", { method: "POST" }),
   logs: async (tail = 500): Promise<string> => {
     const res = await fetch(`/api/logs?tail=${tail}`, withKey());
     if (res.status === 404) return "";
@@ -215,7 +258,12 @@ export const api = {
     await checkSize(files);
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
-    return xhrUpload<DocumentSummary[]>("/api/documents", fd, onProgress);
+    try {
+      return await xhrUpload<DocumentSummary[]>("/api/documents", fd, onProgress);
+    } catch (e) {
+      if (e instanceof NetworkFailure) throw new Error(await explainNetworkFailure(files.map((f) => f.name).join(", ")));
+      throw e;
+    }
   },
   /** How a phone on the same Wi-Fi reaches this computer (answered on the PC only). */
   lan: () => request<LanInfo>("/api/lan"),
@@ -227,7 +275,12 @@ export const api = {
     const fd = new FormData();
     photos.forEach((p) => fd.append("pages", p));
     if (name.trim()) fd.append("name", name.trim());
-    return xhrUpload<DocumentSummary>("/api/documents/scan", fd, onProgress);
+    try {
+      return await xhrUpload<DocumentSummary>("/api/documents/scan", fd, onProgress);
+    } catch (e) {
+      if (e instanceof NetworkFailure) throw new Error(await explainNetworkFailure("the photographed pages"));
+      throw e;
+    }
   },
   getPage: (id: string, page: number) => request<PageData>(`/api/documents/${id}/pages/${page}`),
   pageImageUrl: (id: string, page: number) => `/api/documents/${id}/pages/${page}/image`,
@@ -287,10 +340,11 @@ export async function downloadBlob(url: string, init?: RequestInit, fallbackName
   let res: Response;
   try {
     res = await fetch(url, withKey(init));
-  } catch (e: any) {
-    // Conversions send files through here too, and those can fail for the extra reason.
-    const why = init?.body instanceof FormData ? UPLOAD_FAILED : NETWORK_FAILED;
-    throw new Error(`${why} (${e?.message ?? "network error"})`);
+  } catch {
+    // Conversions send files through here too; name them so the server-alive
+    // reading can point at the file rather than at the connection.
+    const sent = init?.body instanceof FormData ? [...init.body.values()].filter((v): v is File => v instanceof File).map((f) => f.name).join(", ") : "";
+    throw new Error(await explainNetworkFailure(sent || undefined));
   }
   if (!res.ok) {
     let detail = res.statusText;

@@ -253,6 +253,7 @@ Support surface for the desktop app, which has no console. Backs the UI's Diagno
 | Method & path | Request | Response |
 |---|---|---|
 | `GET /diagnostics` | — | `{version, platform, machine, python, frozen, data_dir, exports_dir, log_path, log_exists, log_size, ocr_engine, ocr_engines: {configured, tesseract, rapidocr, rapidocr_version, rapidocr_error, readers}, tesseract_path, tesseract_version, ai_available, ai_model, embedding_provider, max_upload_mb, phone_access, phone_key_required, documents: {total, ready, failed}}` |
+| `POST /quit` | — | 204; stops the desktop app. Refused with 403 unless the request comes from the computer running the app, and 404 when the server was not started by the desktop launcher (development server, tests). This is what **Stop the app** in the sidebar calls when the app runs in a browser tab. |
 | `GET /logs` | `?tail=1–5000 (500)` | `text/plain` — the last `tail` lines of `<data dir>/logs/app.log`. 404 when no log file exists (a development server logs to its console instead). |
 
 Every upload is logged by the `app.api.documents` logger, so an upload failure that leaves no line in the log never reached the server.

@@ -26,7 +26,7 @@ from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
-APP_VERSION = "0.1.6"
+APP_VERSION = "0.1.7"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -85,10 +85,10 @@ def message_box(text: str, title: str = APP_NAME, error: bool = False) -> None:
         print(f"{title}: {text}", file=sys.stderr)
 
 
-def fatal(message: str) -> int:
+def fatal(message: str, headline: str = "could not start") -> int:
     log.error(message)
     hint = f"\n\nDetails were written to:\n{LOG_FILE}" if LOG_FILE else ""
-    message_box(f"{APP_NAME} could not start.\n\n{message}{hint}", error=True)
+    message_box(f"{APP_NAME} {headline}.\n\n{message}{hint}", error=True)
     return 1
 
 
@@ -260,17 +260,25 @@ class ApiServer:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
 
-    def start(self) -> None:
+    def start(self, stop=None) -> None:
         import uvicorn
 
         from app.main import app  # backend package; sys.path set in main()
 
+        # "Stop the app" on the page (POST /api/quit) ends here. Only a server
+        # started by this launcher has anything to stop; the route says so
+        # otherwise.
+        if stop is not None:
+            app.state.stop = stop
         # use_colors=False: uvicorn otherwise asks sys.stdout whether it is a TTY,
         # which has no answer in a windowed build.
         config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info", workers=1, use_colors=False)
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, name="api", daemon=True)
         self._thread.start()
+
+    def alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
 
     def wait_ready(self, timeout: float = 60.0) -> bool:
         deadline = time.time() + timeout
@@ -369,8 +377,12 @@ def install_drop_handler(window) -> bool:
     return True
 
 
-def open_window(url: str, on_close) -> bool:
-    """Open `url` in a native window. Returns False when no GUI backend exists."""
+def open_window(url: str, on_close, watch=None) -> bool:
+    """Open `url` in a native window. Returns False when no GUI backend exists.
+
+    `watch(window)` is called once the window exists, so a watcher can close
+    it from another thread if the server behind it dies.
+    """
     try:
         import webview
     except Exception as exc:  # pragma: no cover - depends on host GUI stack
@@ -388,6 +400,8 @@ def open_window(url: str, on_close) -> bool:
         )
         window.events.closed += on_close
         window.events.loaded += lambda *_: install_drop_handler(window)
+        if watch is not None:
+            watch(window)
         kwargs = {}
         icon = icon_path()
         if icon and sys.platform.startswith("linux"):
@@ -428,35 +442,62 @@ def run() -> int:
         os.environ.setdefault("MDI_ACCESS_KEY", access_key(data_dir))
     log.info("serving on %s (phone access %s)", host, "on" if lan else "off")
 
+    done = threading.Event()  # set by the window closing, Ctrl+C, or "Stop the app" on the page
     port = int(os.environ.get("MDI_PORT") or free_port(host=host))
     server = ApiServer(port, host)
-    server.start()
+    server.start(stop=done.set)
     if not server.wait_ready():
         return fatal("The built-in server did not start within 60 seconds.")
     log.info("UI at %s", server.url)
 
-    done = threading.Event()
-    headless = os.environ.get("MDI_HEADLESS", "").lower() in ("1", "true", "yes")
-    if headless:
-        log.info("headless mode: no window; stop the process to quit")
+    died = threading.Event()
+
+    def watch_server(on_dead) -> None:
+        """A server thread that dies takes every request with it and says
+        nothing: the page just stops answering. Notice, and say so."""
+        while not done.is_set():
+            if not server.alive():
+                log.error("the built-in server stopped while the app was running; the lines above say why")
+                died.set()
+                on_dead()
+                return
+            time.sleep(2)
+
+    def watch(on_dead) -> None:
+        threading.Thread(target=watch_server, args=(on_dead,), name="watchdog", daemon=True).start()
+
+    def wait() -> None:
         try:
             while not done.is_set():
                 time.sleep(0.5)
         except KeyboardInterrupt:
             pass
-    elif not open_window(server.url, lambda: done.set()):
+
+    headless = os.environ.get("MDI_HEADLESS", "").lower() in ("1", "true", "yes")
+    if headless:
+        log.info("headless mode: no window; stop the process or POST /api/quit to quit")
+        watch(done.set)
+        wait()
+    elif not open_window(server.url, lambda: done.set(), watch=lambda w: watch(w.destroy)):
         webbrowser.open(server.url)
+        log.info("running in the browser at %s", server.url)
+        notice = (
+            f"{APP_NAME} is running in your web browser at {server.url}\n\n"
+            "To stop it, use \u201cStop the app\u201d at the bottom of the sidebar in the browser."
+        )
         if sys.platform == "win32" and FROZEN:
-            # No console to Ctrl+C in a windowed build: give the user a button.
-            message_box(f"{APP_NAME} is running in your web browser at {server.url}\n\nClick OK to stop the app.")
+            # Informational only, on its own thread so nothing waits on it.
+            # This box used to be the app's one visible control and its OK
+            # button stopped the server - one click, sometimes hours later
+            # from behind the browser window, and every request failed at once.
+            threading.Thread(target=message_box, args=(notice,), name="notice", daemon=True).start()
         else:
-            print(f"\n{APP_NAME} is running at {server.url}\nPress Ctrl+C to quit.\n")
-            try:
-                while not done.is_set():
-                    time.sleep(0.5)
-            except KeyboardInterrupt:
-                pass
+            print(f"\n{notice}\nPress Ctrl+C to quit.\n")
+        watch(done.set)
+        wait()
     server.stop()
+    if died.is_set():
+        return fatal("The built-in server stopped while the app was running, so the page could no longer reach it. Start the app again; if it keeps happening, the log names the cause.", headline="stopped")
     return 0
 
 

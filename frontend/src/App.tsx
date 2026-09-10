@@ -27,6 +27,17 @@ const NAV = [
 export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  const [stopped, setStopped] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+  const stopApp = async () => {
+    if (!window.confirm("Stop the app? Anything being read stops now and carries on the next time the app starts.")) return;
+    try {
+      await api.quit();
+      setStopped(true);
+    } catch (e: any) {
+      setStopError(e?.message ?? String(e));
+    }
+  };
   const navigate = useNavigate();
   useEffect(() => {
     api.status().then(setStatus).catch(() => setStatus(null));
@@ -78,6 +89,20 @@ export default function App() {
             </>
           ) : (
             "Connecting to API…"
+          )}
+          {/* A browser tab has no close box that stops a server. This is the
+              one way to stop the app when it could not open its own window,
+              and it is offered only then: the window has its own close box,
+              and a phone must not switch the computer's app off. */}
+          {!api.isDesktop() && !isPhone() && (
+            <div style={{ marginTop: 8 }}>
+              {stopped ? (
+                <span>The app has stopped. You can close this tab.</span>
+              ) : (
+                <button className="btn sm" onClick={stopApp} title="Stop the app running on this computer">Stop the app</button>
+              )}
+              {stopError && <div className="small" style={{ color: "var(--crit)", marginTop: 4 }}>{stopError}</div>}
+            </div>
           )}
         </div>
       </aside>

@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.1.7 - 2026-09-10
+
+When the app cannot open its own window it runs in a browser tab, and that
+mode had a trap in it. This release removes the trap and makes the app say
+plainly when it is gone.
+
+- Fixed: on Windows, the small dialog shown when the app runs in a browser tab
+  had one button, **OK**, and OK **stopped the app**. Clicking it - or finding
+  it behind the browser later and clicking it then - made every request fail
+  at once with "Failed to fetch". OK now only closes the dialog.
+- Added: **Stop the app** at the bottom of the sidebar, shown only when the app
+  is running in a browser tab on the computer itself. It asks first. A phone
+  cannot stop the computer's app (`POST /api/quit` is refused from the network).
+- Changed: when a request never completes, the app now checks whether its
+  server still answers before choosing what to say. "The app is no longer
+  running - start it again; its log is at …" (the path is remembered from the
+  last time Diagnostics answered, so it can be named after the server is gone),
+  "the phone could not reach the computer - check the Wi-Fi and that the PC is
+  awake", or, when the server is fine, that the file itself stopped being
+  readable while it was being sent. The old message guessed at OneDrive and zip
+  files and pointed at a Diagnostics page that could not answer either.
+- Added: the launcher notices when its built-in server stops while the app is
+  open, and says so in a dialog that names the log, instead of leaving a page
+  that silently fails.
+- Added: the Windows installer checks for the Microsoft WebView2 runtime the
+  app's window needs and installs it when it is missing (needs an Internet
+  connection at that moment; nearly every Windows 10/11 machine already has
+  it). Without it the app can only open in a browser tab.
+- The launch check that runs in CI on every platform now also stops the app
+  through **Stop the app** and requires a clean exit within ten seconds.
+
 ## v0.1.6 - 2026-09-09
 
 Settling the values the readers could not agree on stops being a chase around
