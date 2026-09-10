@@ -17,7 +17,7 @@ import pymupdf
 from PIL import Image
 
 from ..config import get_settings
-from ..ocr.engine import run_ocr, run_ocr_readings
+from ..ocr.engine import read_page, run_ocr
 from ..ocr.postprocess import normalise_technical_text
 from ..storage.files import page_image_path
 from .types import RawBlock, RawPage
@@ -43,6 +43,10 @@ def read_pdf(path: Path, document_id: str, progress=None) -> list[RawPage]:
     settings = get_settings()
     doc = pymupdf.open(path)
     pages: list[RawPage] = []
+    # A reader that keeps stopping on this document sits out the rest of it
+    # rather than being restarted, at a model load each time, for every page.
+    stops = 0
+    exclude: set[str] = set()
     try:
         for index, page in enumerate(doc):
             page_number = index + 1
@@ -84,7 +88,11 @@ def read_pdf(path: Path, document_id: str, progress=None) -> list[RawPage]:
                 # Tables from vector text.
                 _attach_tables(page, raw)
             else:
-                _ocr_page(page, raw)
+                _ocr_page(page, raw, exclude)
+                if raw.reader_stopped:
+                    stops += 1
+                    if stops >= settings.ocr_max_stops_per_document:
+                        exclude.add(raw.reader_stopped)
             pages.append(raw)
     finally:
         doc.close()
@@ -190,20 +198,27 @@ def _attach_tables(page: pymupdf.Page, raw: RawPage) -> None:
         raw.blocks = kept
 
 
-def _ocr_page(page: pymupdf.Page, raw: RawPage) -> None:
+def _ocr_page(page: pymupdf.Page, raw: RawPage, exclude: set[str] | frozenset[str] = frozenset()) -> None:
     """Render the page for OCR and fill `raw` with the best reading (blocks)
     and the second reader's lines (for verification)."""
     settings = get_settings()
     zoom = settings.ocr_dpi / 72.0
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
     img = _pix_to_pil(pix)
-    ocr_image_into(img, zoom, raw)
+    ocr_image_into(img, zoom, raw, exclude)
 
 
-def ocr_image_into(img: Image.Image, scale: float, raw: RawPage) -> None:
+def ocr_image_into(img: Image.Image, scale: float, raw: RawPage, exclude: set[str] | frozenset[str] = frozenset()) -> None:
     """Run all readers on the image; the best becomes the page text, the next
-    is kept as the independent second reading. Coordinates: pixel / scale."""
-    readings = run_ocr_readings(img)
+    is kept as the independent second reading. Coordinates: pixel / scale.
+    A reader that stopped, or was left out, is recorded on the page so the
+    document can say which values rest on a single reading."""
+    result = read_page(img, exclude)
+    if result.stopped:
+        raw.reader_stopped = result.stopped[0]
+    if exclude:
+        raw.reader_skipped = ",".join(sorted(exclude))
+    readings = result.readings
     if not readings:
         raw.blocks, raw.text_source, raw.ocr_confidence = [], "none", None
         return

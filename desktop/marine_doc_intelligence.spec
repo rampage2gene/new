@@ -31,6 +31,10 @@ for pkg in ("rapidocr", "onnxruntime", "pyclipper", "shapely", "omegaconf", "col
         print(f"warning: {pkg} not collected: {exc}")
 hiddenimports += collect_submodules("uvicorn") + collect_submodules("app") + [
     "sqlalchemy.dialects.sqlite", "multipart", "PIL._tkinter_finder",
+    # The OCR reader's child process: PyInstaller's own runtime hook handles
+    # the spawn; these are the modules that spawn imports at run time.
+    "multiprocessing.spawn", "multiprocessing.popen_spawn_win32", "multiprocessing.popen_spawn_posix",
+    "multiprocessing.reduction", "multiprocessing.resource_tracker",
 ]
 
 a = Analysis(
@@ -64,7 +68,7 @@ if sys.platform == "darwin":
         icon=str(ICON),
         bundle_identifier="com.rampage2gene.marine-doc-intelligence",
         info_plist={
-            "CFBundleShortVersionString": "0.1.7",
+            "CFBundleShortVersionString": "0.1.8",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },

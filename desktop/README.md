@@ -124,6 +124,13 @@ checked:
 | **85%** or lower *1 reader* | nobody else could read that spot; a single reading |
 | **✓ 100%** *you* | you filled it in or ticked it as verified |
 
+RapidOCR runs in a process of its own. If it crashes or stops answering on a
+page, that page is read by Tesseract alone, the document still finishes, and
+the **Verification** tab names the page ("The RapidOCR reader stopped while
+reading page N…") with a link to it - its values then rest on one reading
+until you check them or process the document again. The reader's own log is
+`<data dir>\logs\ocr-worker.log`; a crash leaves its trace there.
+
 Blanks and single readings are collected in the document's **To fill in** tab:
 open the page, read the value, type it (or click a reading) and press Enter;
 or *Confirm as is* when the page agrees. Entries survive a re-run (↻). Optional:

@@ -26,7 +26,7 @@ from pathlib import Path
 
 APP_NAME = "Marine Electrical Document Intelligence"
 APP_ID = "marine-doc-intelligence"
-APP_VERSION = "0.1.7"
+APP_VERSION = "0.1.8"
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 REPO_DIR = Path(__file__).resolve().parent.parent
@@ -512,4 +512,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # The OCR reader runs in a child process this executable starts again
+    # for that purpose. freeze_support() is where such a child does its work
+    # and exits; it must come before anything else, or the child would start
+    # a second app. Inside the guard: the tests import this file as a module.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     sys.exit(main())

@@ -1,6 +1,7 @@
 """Desktop launcher: must start with no console streams (windowed Windows build)."""
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import logging
@@ -208,3 +209,13 @@ def test_lan_addresses_are_private_ipv4(launcher):
         ip = ipaddress.ip_address(addr)
         assert ip.version == 4 and ip.is_private and not ip.is_loopback
     assert phone_urls(8765, "abc") == [f"http://{a}:8765/?key=abc" for a in lan_addresses()]
+
+
+def test_the_entry_point_hands_a_spawned_child_to_freeze_support_first():
+    """The OCR reader's process is this executable started again. If anything
+    ran before freeze_support(), that child would start a second app."""
+    tree = ast.parse(LAUNCHER.read_text(encoding="utf-8"))
+    guard = [n for n in tree.body if isinstance(n, ast.If) and "__main__" in ast.unparse(n.test)]
+    assert len(guard) == 1
+    statements = [ast.unparse(n) for n in guard[0].body]
+    assert statements[:2] == ["import multiprocessing", "multiprocessing.freeze_support()"], statements

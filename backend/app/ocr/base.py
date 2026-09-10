@@ -76,6 +76,12 @@ def _mean(values):
     return sum(values) / len(values) if values else 0.0
 
 
+class ReaderStopped(RuntimeError):
+    """A reader's process died or did not answer in time, so it never read the
+    page. Distinct from an ordinary failure: the page can still be read by the
+    other reader, and the reader itself can be started again."""
+
+
 class OCREngine(Protocol):
     name: str
 

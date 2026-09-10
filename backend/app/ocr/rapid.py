@@ -5,6 +5,13 @@ a CRNN-style recogniser, Tesseract reads characters with an LSTM; they fail
 in different ways, which is what makes their agreement on a value worth
 trusting. The models ship inside the ``rapidocr`` wheel, run on the CPU and
 never touch the network.
+
+The inference is native code, and native code that crashes takes its whole
+process with it. So by default the models live in a separate worker process
+(see ``worker.py``) and this module's ``RapidEngine`` only talks to it; the
+functions ``load`` and ``recognize_array`` are what the worker runs. This
+module is imported by that worker, so it must import nothing from the rest of
+the application at module level.
 """
 from __future__ import annotations
 
@@ -24,7 +31,13 @@ _lock = threading.Lock()
 Quad = list  # [[x, y] * 4]
 
 
-def _load():
+def _isolate() -> bool:
+    from ..config import get_settings  # lazily: the worker process never needs settings
+
+    return bool(get_settings().ocr_isolate)
+
+
+def load():
     """Import and build the RapidOCR runner once per process."""
     global _engine, _engine_error
     if _engine is not None or _engine_error is not None:
@@ -54,8 +67,28 @@ def rapid_version() -> str | None:
 
 
 def unavailable_reason() -> str | None:
-    _load()
+    if _isolate():
+        from . import worker
+
+        return worker.get_worker().unavailable_reason()
+    load()
     return _engine_error
+
+
+def load_error() -> str | None:
+    """Why the models could not be loaded in this process, if they could not."""
+    return _engine_error
+
+
+def recognize_array(arr) -> list[OCRBlock]:
+    """Read an RGB uint8 array of shape (height, width, 3). Runs wherever the
+    models are loaded: the worker process, or this one when not isolating."""
+    engine = load()
+    if engine is None:
+        return []
+    with _lock:
+        result = engine(arr)
+    return _to_blocks(result)
 
 
 def _rect(quad) -> tuple[float, float, float, float]:
@@ -68,18 +101,22 @@ class RapidEngine:
     name = "rapidocr"
 
     def available(self) -> bool:
-        return _load() is not None
+        if _isolate():
+            from . import worker
+
+            return worker.get_worker().available()
+        return load() is not None
 
     def recognize(self, image: Image.Image) -> list[OCRBlock]:
+        """May raise ReaderStopped when the worker process dies or does not
+        answer; the caller decides what one lost reading means for the page."""
+        if _isolate():
+            from . import worker
+
+            return worker.get_worker().recognize(image)
         import numpy as np
 
-        engine = _load()
-        if engine is None:
-            return []
-        arr = np.asarray(image.convert("RGB"))
-        with _lock:
-            result = engine(arr)
-        return _to_blocks(result)
+        return recognize_array(np.asarray(image.convert("RGB")))
 
 
 def _to_blocks(result) -> list[OCRBlock]:

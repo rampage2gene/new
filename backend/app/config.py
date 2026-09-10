@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     ocr_languages: str = "eng"
     ocr_retry_below: float = 0.80  # Tesseract re-reads a binarised page when its mean word confidence is below this
     min_embedded_chars_per_page: int = 40  # below this a page is treated as a scan
+    # RapidOCR runs native code (onnxruntime). In its own process a crash costs
+    # one page's second reading; in the server process it would end the app.
+    ocr_isolate: bool = True
+    ocr_page_timeout: float = 180.0  # a page the reader has not answered in this long is given up
+    ocr_start_timeout: float = 120.0  # loading the models on a slow disk can take a while
+    ocr_max_stops_per_document: int = 3  # after this many stops the reader sits out the rest of the document
+    ocr_crash_once: bool = False  # test hook: the first reader started crashes on its first page
 
     # Quality control
     low_confidence_threshold: float = 0.80

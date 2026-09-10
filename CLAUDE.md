@@ -23,7 +23,7 @@ this — not for speed, not for a tidier screen, not for a shorter flow.
 
 ## Working here
 
-- **Tests:** `cd backend && python -m pytest` (112 tests). They must pass
+- **Tests:** `cd backend && python -m pytest` (124 tests). They must pass
   before a commit.
 - **UI build:** `cd frontend && npm run build`.
 - **The built app:** `python desktop/build.py`, then

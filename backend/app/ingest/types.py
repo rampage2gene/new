@@ -40,6 +40,8 @@ class RawPage:
     ocr_engine: str | None = None  # engine that produced the page text (ocr pages)
     alt_ocr_engine: str | None = None  # the independent second reader, when there was one
     alt_ocr: list[dict] | None = None  # its lines: {"t": text, "c": conf, "bbox": [...]} in page coords
+    reader_stopped: str | None = None  # a reader that died or did not answer on this page
+    reader_skipped: str | None = None  # a reader left out because it had already stopped too often
 
     @property
     def text(self) -> str:

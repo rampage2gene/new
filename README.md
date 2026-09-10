@@ -177,6 +177,9 @@ Reading and checking scanned pages:
 |---|---|---|
 | `MDI_OCR_ENGINE` | `auto` | `auto` runs both readers (RapidOCR and Tesseract) on every scanned page and keeps the better reading as the page text; `rapid` or `tesseract` use one reader only; `none` skips OCR. |
 | `MDI_OCR_RETRY_BELOW` | `0.80` | Tesseract re-reads a page in black-and-white when its mean word confidence is below this. |
+| `MDI_OCR_ISOLATE` | `true` | Run the RapidOCR reader in its own process, so a crash in it costs one page's second reading instead of the app. `false` runs it in the server process. |
+| `MDI_OCR_PAGE_TIMEOUT` | `180` | Seconds a page may take before the reader is judged stuck, stopped and started again; the page is then read by Tesseract alone. |
+| `MDI_OCR_MAX_STOPS_PER_DOCUMENT` | `3` | After this many stops in one document the reader sits out the rest of it. |
 | `MDI_VERIFY` | `true` | Check every value from a scanned page against the second reader; a disputed value is left blank to fill in rather than guessed. |
 | `MDI_VERIFY_AI` | `true` | When an Anthropic key is configured, show the remaining blanks to the model with the page image. Nothing leaves the machine without a key. |
 | `MDI_AI_VERIFY_MAX_PAGES` | `60` | Cost guard for that check. |

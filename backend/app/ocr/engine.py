@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from PIL import Image
 
 from ..config import get_settings
-from .base import OCRBlock, OCREngine
+from .base import OCRBlock, OCREngine, ReaderStopped
 from .rapid import RapidEngine, rapid_version, unavailable_reason
 from .tesseract import TesseractEngine
 
@@ -45,21 +45,23 @@ class OCRReading:
         return sum(len(w.text) for b in self.blocks for w in b.words)
 
 
-def get_ocr_engines() -> list[OCREngine]:
+def get_ocr_engines(exclude: frozenset[str] = frozenset()) -> list[OCREngine]:
     """Engines to run, best first, according to `MDI_OCR_ENGINE`:
-    auto (both when available) | rapid | tesseract | none."""
+    auto (both when available) | rapid | tesseract | none. `exclude` names
+    readers to leave out - one that has already stopped too often in the
+    document being read."""
     s = get_settings()
     choice = (s.ocr_engine or "auto").lower()
     if choice == "none":
         return []
     engines: list[OCREngine] = []
-    if choice in ("auto", "rapid", "rapidocr"):
+    if choice in ("auto", "rapid", "rapidocr") and RapidEngine.name not in exclude:
         rapid = RapidEngine()
         if rapid.available():
             engines.append(rapid)
         elif choice != "auto":
             raise RuntimeError(f"RapidOCR requested but it could not be loaded: {unavailable_reason()}")
-    if choice in ("auto", "tesseract"):
+    if choice in ("auto", "tesseract") and TesseractEngine.name not in exclude:
         tess = TesseractEngine()
         if tess.available():
             engines.append(tess)
@@ -78,7 +80,7 @@ def engine_status() -> dict:
     """What Diagnostics shows: which readers this installation has."""
     tess = TesseractEngine()
     rapid = RapidEngine()
-    return {
+    status = {
         "configured": get_settings().ocr_engine,
         "tesseract": tess.available(),
         "rapidocr": rapid.available(),
@@ -86,6 +88,11 @@ def engine_status() -> dict:
         "rapidocr_error": None if rapid.available() else unavailable_reason(),
         "readers": [e.name for e in get_ocr_engines()],
     }
+    if get_settings().ocr_isolate:
+        from .worker import get_worker
+
+        status["rapidocr_worker"] = get_worker().status()  # its process, and how often it has stopped
+    return status
 
 
 def _undo_upscale(engine: OCREngine, image: Image.Image, blocks: list[OCRBlock]) -> None:
@@ -101,19 +108,37 @@ def _undo_upscale(engine: OCREngine, image: Image.Image, blocks: list[OCRBlock])
                     wd.bbox = (x0 / 2.0, y0 / 2.0, x1 / 2.0, y1 / 2.0)
 
 
-def run_ocr_readings(image: Image.Image) -> list[OCRReading]:
-    """Run every configured engine on the image. Returns readings best first,
-    all with bboxes in *image pixel* coordinates."""
+@dataclass
+class PageReadings:
+    readings: list[OCRReading]  # best first
+    stopped: list[str]  # readers whose process died or did not answer on this page
+
+
+def read_page(image: Image.Image, exclude: frozenset[str] | set[str] = frozenset()) -> PageReadings:
+    """Run every configured engine on the image. Readings come back best
+    first, all with bboxes in *image pixel* coordinates. A reader that stops
+    is named rather than raised: the page goes on with the other reader, and
+    the caller records what that page's values rest on."""
     readings: list[OCRReading] = []
-    for engine in get_ocr_engines():
+    stopped: list[str] = []
+    for engine in get_ocr_engines(frozenset(exclude)):
         try:
             blocks = engine.recognize(image)
+        except ReaderStopped as exc:
+            log.warning("ocr: the %s reader stopped on a page: %s", engine.name, exc)
+            stopped.append(engine.name)
+            continue
         except Exception as exc:  # noqa: BLE001 - one broken engine must not lose the page
             log.warning("ocr: %s failed on a page: %s", engine.name, exc)
             continue
         _undo_upscale(engine, image, blocks)
         readings.append(OCRReading(engine=engine.name, blocks=blocks))
-    return _rank(readings)
+    return PageReadings(_rank(readings), stopped)
+
+
+def run_ocr_readings(image: Image.Image) -> list[OCRReading]:
+    """The readings alone, for callers that do not track stopped readers."""
+    return read_page(image).readings
 
 
 def _rank(readings: list[OCRReading]) -> list[OCRReading]:

@@ -176,7 +176,9 @@ def main() -> int:
         return 1
     port = free_port()
     data_dir = Path(tempfile.mkdtemp(prefix="mdi-smoke-"))
-    env = {**os.environ, "MDI_HEADLESS": "1", "MDI_PORT": str(port), "MDI_DATA_DIR": str(data_dir)}
+    # MDI_OCR_CRASH_ONCE: the first OCR reader the app starts dies on its first
+    # page, the way native code dies. The document must still come back ready.
+    env = {**os.environ, "MDI_HEADLESS": "1", "MDI_PORT": str(port), "MDI_DATA_DIR": str(data_dir), "MDI_OCR_CRASH_ONCE": "1"}
     print(f"starting {exe} on port {port}, data in {data_dir}")
     proc = subprocess.Popen([str(exe)], env=env, cwd=str(exe.parent))
     base = f"http://127.0.0.1:{port}"
@@ -188,6 +190,8 @@ def main() -> int:
     phone: dict | None = None
     scan: dict | None = None
     quit: dict | None = None
+    crash: dict | None = None
+    crash_flags: list = []
     try:
         while time.time() < deadline:
             if proc.poll() is not None:
@@ -208,6 +212,19 @@ def main() -> int:
                 print(f"diagnostics failed: {type(exc).__name__}: {exc}")
             pdf = data_dir / "smoke-sample.pdf"
             make_sample_pdf(pdf)
+            # First: the document whose reader crashes on its scanned page.
+            crash_pdf = data_dir / "reader-crash-sample.pdf"
+            make_sample_pdf(crash_pdf)
+            try:
+                crash = upload_and_process(base, crash_pdf)
+                with urllib.request.urlopen(f"{base}/api/documents/{crash['id']}/qc", timeout=10) as r:
+                    crash_flags = [f for f in json.loads(r.read()) if f.get("flag_type") == "reader_stopped"]
+                print(f"reader crash: status={crash.get('status')} engines={(crash.get('stats') or {}).get('ocr_engines')} "
+                      f"flags={[(f.get('page'), f.get('message', '')[:60]) for f in crash_flags]} "
+                      f"app alive={proc.poll() is None}")
+            except Exception as exc:
+                print(f"reader crash check failed: {type(exc).__name__}: {exc}")
+            # Then the ordinary document: proves the reader came back.
             try:
                 doc = upload_and_process(base, pdf)
                 stats = doc.get("stats") or {}
@@ -258,9 +275,21 @@ def main() -> int:
     elif not doc or doc.get("status") != "ready" or (doc.get("page_count") or 0) != 2:
         ok = False
         print("FAILED: the uploaded PDF was not processed to 'ready' with 2 pages")
+    elif not crash or crash.get("status") != "ready" or (crash.get("page_count") or 0) != 2:
+        ok = False
+        print(f"FAILED: the document whose reader crashed did not finish 'ready' with 2 pages: {crash and crash.get('status')} {crash and crash.get('error')}")
+    elif (crash.get("stats") or {}).get("ocr_engines") != ["tesseract"]:
+        ok = False
+        print(f"FAILED: after the reader crash the page should have been read by Tesseract alone: {(crash.get('stats') or {}).get('ocr_engines')}")
+    elif not any(f.get("page") == 2 for f in crash_flags):
+        ok = False
+        print(f"FAILED: no 'reader_stopped' check names page 2 after the reader crash: {crash_flags}")
+    elif not (data_dir / "logs" / "ocr-worker.log").exists():
+        ok = False
+        print("FAILED: the OCR reader wrote no logs/ocr-worker.log")
     elif "rapidocr" not in ((doc.get("stats") or {}).get("ocr_engines") or []):
         ok = False
-        print("FAILED: the bundled RapidOCR reader did not read the scanned page (stats.ocr_engines)")
+        print("FAILED: the RapidOCR reader did not come back after its crash (stats.ocr_engines of the second document)")
     elif ((doc.get("stats") or {}).get("verification") or {}).get("reader2") != "tesseract":
         ok = False
         print("FAILED: the second reader (Tesseract) did not run, so values were not cross-checked")
@@ -290,6 +319,9 @@ def main() -> int:
     if not ok or "-v" in os.environ.get("MDI_SMOKE_FLAGS", ""):
         print("---- app.log ----")
         print(log.read_text(encoding="utf-8", errors="replace") if log.exists() else "(no log file written)")
+        worker_log = data_dir / "logs" / "ocr-worker.log"
+        print("---- ocr-worker.log ----")
+        print(worker_log.read_text(encoding="utf-8", errors="replace") if worker_log.exists() else "(no worker log written)")
     return 0 if ok and log.exists() else 1
 
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.1.8 - 2026-09-10
+
+A crash in the OCR reader used to take the whole app with it - window,
+server, every document being read - with nothing on screen to say so. Now it
+costs one page's second reading.
+
+- Changed: the **RapidOCR reader runs in a process of its own.** If it
+  crashes or stops answering on a page, that page is read by Tesseract alone,
+  the document still finishes, and the reader is started again for the next
+  page. A reader that stops three times in one document sits out the rest of
+  it rather than being restarted for every page.
+- Added: the **Verification tab names the page** - "The RapidOCR reader
+  stopped while reading page 37, so only Tesseract read it and its values
+  rest on a single reading" - with a link to the page. Nothing is guessed:
+  the values from that page carry the single-reading mark until you check
+  them or process the document again.
+- Added: the reader keeps its own log, `<data dir>\logs\ocr-worker.log`,
+  with a traceback written even for a crash in native code. That is the file
+  to send when a document keeps stopping the reader.
+- Added: Diagnostics shows the reader's process and how often it has stopped.
+- The launch check in CI now crashes the reader on purpose on the first page
+  and requires the document to come back ready, the page to be named, and
+  the reader to be back for the next document - on Windows, macOS and Linux.
+- Settings: `MDI_OCR_ISOLATE`, `MDI_OCR_PAGE_TIMEOUT` (180 s),
+  `MDI_OCR_MAX_STOPS_PER_DOCUMENT` (3).
+
 ## v0.1.7 - 2026-09-10
 
 When the app cannot open its own window it runs in a browser tab, and that

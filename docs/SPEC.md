@@ -267,6 +267,7 @@ Details in [DATA_MODEL.md](DATA_MODEL.md).
 - Uploads are written to the originals store, a `Document` row is created with `status=queued`, and the id is submitted to a `ThreadPoolExecutor` (`MDI_INGEST_WORKERS`, default 2).
 - With `MDI_BACKGROUND_PROCESSING=false` the pipeline runs inline inside the upload request (used by the test suite).
 - OCR runs under a process-wide lock and `OMP_THREAD_LIMIT=1` (two concurrent Tesseract runs on a small container were measured to oversubscribe the CPU by more than an order of magnitude).
+- The RapidOCR reader runs in a **separate worker process** (`ocr/worker.py`, `multiprocessing` spawn context, `MDI_OCR_ISOLATE=true`). onnxruntime is native code and a crash there ends its process; in the server process that was the whole app. Pages cross the pipe as raw RGB bytes; a reader that dies or does not answer within `MDI_OCR_PAGE_TIMEOUT` raises `ReaderStopped`, the page is read by Tesseract alone, `RawPage.reader_stopped` is set, a `reader_stopped` QC flag names the page, and the worker is started again for the next page. After `MDI_OCR_MAX_STOPS_PER_DOCUMENT` stops the reader sits out the rest of that document. The worker logs to `<data>/logs/ocr-worker.log` with `faulthandler` enabled, so a native crash leaves a traceback.
 - Persistence of one document's results runs under a lock; all derived rows for the document are deleted and rewritten (idempotent re-processing).
 - Failures set `status=failed`, `error="<ExceptionType>: message"`, `progress="Failed"`; the original file is kept.
 

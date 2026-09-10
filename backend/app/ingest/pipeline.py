@@ -20,7 +20,7 @@ from ..extraction.entities import extract_entities
 from ..extraction.invoices import extract_invoice
 from ..extraction.verify import verify_entities
 from ..models import Block, Chunk, Document, Entity, Invoice, Page, QCFlag, DiagramAnalysis, new_id
-from ..qc.validate import validate_entities
+from ..qc.validate import QCFlagData, validate_entities
 from ..search.index import build_chunks, index_chunks, remove_document_index
 from ..structure.layout import analyse_layout
 from ..structure.metadata import detect_metadata
@@ -78,7 +78,7 @@ def process_document(document_id: str) -> None:
             report, vflags = verify_entities(pages, entities, source_path=str(path), file_type=file_type)
             verification = report.as_dict()
         _set_progress(document_id, "Validating critical values")
-        flags = validate_entities(entities) + vflags
+        flags = validate_entities(entities) + vflags + _reader_flags(pages)
         invoice = None
         if meta.get("document_type") in ("Invoice", "Receipt"):
             invoice = extract_invoice(pages, meta.get("manufacturer"))
@@ -103,6 +103,49 @@ def process_document(document_id: str) -> None:
                 doc.status = "failed"
                 doc.error = f"{type(exc).__name__}: {exc}"
                 doc.progress = "Failed"
+
+
+_READER_NAMES = {"rapidocr": "RapidOCR", "tesseract": "Tesseract"}
+
+
+def _reader_flags(pages: list[RawPage]) -> list[QCFlagData]:
+    """A page whose second reader stopped still finishes, but its values rest
+    on one reading. Say so, per page, where the checks are listed, with the
+    page a click away."""
+    flags: list[QCFlagData] = []
+    for p in pages:
+        if not p.reader_stopped:
+            continue
+        stopped = _READER_NAMES.get(p.reader_stopped, p.reader_stopped)
+        if p.ocr_engine:
+            read_by = _READER_NAMES.get(p.ocr_engine, p.ocr_engine)
+            message = (
+                f"The {stopped} reader stopped while reading page {p.page_number}, so only {read_by} read it and its "
+                f"values rest on a single reading. Open the page and check them; processing the document again (\u21bb) "
+                f"reads it with both readers."
+            )
+        else:
+            message = (
+                f"The {stopped} reader stopped while reading page {p.page_number} and no other reader was available, "
+                f"so the page has no text. Process the document again (\u21bb) to read it."
+            )
+        flags.append(QCFlagData("reader_stopped", "warning", message, page_number=p.page_number,
+                                details={"reader": p.reader_stopped, "read_by": p.ocr_engine}))
+    skipped = [p for p in pages if p.reader_skipped]
+    if skipped:
+        first, last = skipped[0].page_number, skipped[-1].page_number
+        reader = _READER_NAMES.get(skipped[0].reader_skipped, skipped[0].reader_skipped)
+        span = f"page {first}" if first == last else f"pages {first}\u2013{last}"
+        others = sorted({_READER_NAMES.get(p.ocr_engine, p.ocr_engine) for p in skipped if p.ocr_engine})
+        by = f"{' and '.join(others)} alone" if others else "no reader at all"
+        flags.append(QCFlagData(
+            "reader_stopped", "warning",
+            f"The {reader} reader stopped {get_settings().ocr_max_stops_per_document} times in this document, so {span} "
+            f"were read by {by}. Their values rest on a single reading: check them against the page, or process the "
+            f"document again (\u21bb) once the reader is back.",
+            page_number=first, details={"reader": skipped[0].reader_skipped, "pages": [p.page_number for p in skipped]},
+        ))
+    return flags
 
 
 def _read_pages(path: Path, file_type: str, document_id: str) -> list[RawPage]:
