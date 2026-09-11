@@ -166,12 +166,25 @@ export interface Answer {
   ai_error?: string;
 }
 
-export interface InputSpec { key: string; label: string; unit: string | null; kind: "number" | "select" | "text"; required: boolean; default: any; options: { value: string; label: string }[] | null; help: string | null; entity_types: string[]; qualifiers: string[] }
+/** `answers`: an input a person fills in when a result came back blank; names the blank it answers and is shown only then. */
+export interface InputSpec { key: string; label: string; unit: string | null; kind: "number" | "select" | "text"; required: boolean; default: any; options: { value: string; label: string }[] | null; help: string | null; entity_types: string[]; qualifiers: string[]; answers?: string | null }
 export interface CalculatorSpec { id: string; name: string; category: string; description: string; formula: string; inputs: InputSpec[]; outputs: { key: string; label: string; unit?: string }[]; notes: string[] }
 export interface SourceRef { document_id?: string | null; document_name?: string | null; page?: number | null; section?: string | null; entity_id?: string | null; snippet?: string | null; confidence?: number | null }
 export interface CalcInputValue { value: any; unit?: string | null; source?: SourceRef | null; origin?: string }
-export interface CalcResultValue { key: string; label: string; value: any; unit: string | null; classification: string; note?: string | null }
-export interface CalcResult { calculator_id: string; calculator_name: string; formula: string; inputs: Record<string, CalcInputValue>; steps: string[]; results: CalcResultValue[]; assumptions: string[]; warnings: string[]; sources: SourceRef[]; classification: string; disclaimer: string }
+export interface CalcResultValue { key: string; label: string; value: any; unit: string | null; classification: string; note?: string | null; group?: string | null }
+/** A blank result is a request: which result, why, and the input that answers it (null when the fix is elsewhere, e.g. the reference tables). */
+export interface CalcAsk { field: string; reason: string; input_key: string | null; unit: string | null; prompt: string }
+export interface CheatSheetEntry { topic: string; rule: string; clause: string; page: number; applies_to: string[]; status?: "draft" | "confirmed" }
+export interface CalcResult { calculator_id: string; calculator_name: string; formula: string; inputs: Record<string, CalcInputValue>; steps: string[]; results: CalcResultValue[]; assumptions: string[]; warnings: string[]; sources: SourceRef[]; asks?: CalcAsk[]; reminders?: CheatSheetEntry[]; classification: string; disclaimer: string }
+
+/** The owner's ABYC E-11 reference tables, as the app sees them. */
+export type ReferenceTableId = "constants" | "circular_mils" | "ampacity_outside_engine_space" | "ampacity_inside_engine_space" | "bundling_factors" | "voltage_drop_3pct" | "voltage_drop_10pct" | "fuse_classes";
+export interface ReferenceTableRow { id: ReferenceTableId; kind: string; title: string | null; page: number | null; status: "missing" | "draft" | "confirmed" | "fixture"; rows: number; origin: "yours" | "bundled" | null; document_id?: string | null; layout: { title: string; columns?: string[] } }
+export interface ReferenceStatus { installed: boolean; confirmed: string[]; missing: string[]; fixture: boolean; folders: { yours: string; bundled: string }; tables: ReferenceTableRow[]; cheatsheet: { entries: number; origin: string | null } }
+/** One table file; the shape depends on `kind` (see packages/e11-calc/schema). */
+export interface ReferenceTable { id: ReferenceTableId; kind: string; title?: string; status: "missing" | "draft" | "confirmed" | "fixture"; source?: { document: string; edition?: string; table?: string; page?: number; document_id?: string }; edits?: Record<string, string>; origin?: string | null; layout: { title: string; columns?: string[] }; [key: string]: any }
+export interface DetectedTable { page: number; table_index: number; header: string[]; rows: number; section?: string | null }
+export interface CheatSheetResponse { source: { document: string; edition?: string } | null; entries: CheatSheetEntry[]; markdown: string; origin: string | null }
 
 export interface DiagramComponent { id: string; type: string; label: string; rating?: string | null; confidence: "confirmed" | "high" | "possible" | "unknown"; bbox_pct?: number[] | null }
 export interface DiagramConnection { from_id: string; to_id: string; polarity: string; circuit: string; direction: string; protection: { type: string; rating?: string | null; confidence: string }[]; confidence: string; note?: string | null }

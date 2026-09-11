@@ -173,6 +173,9 @@ Status: **I** implemented, **P** partial, **R** roadmap. "Test" names the pytest
 | CALC-3 | Modules: `dc_current`, `inverter_dc_current`, `voltage_drop`, `battery_runtime`, `alternator_charging`, `ac_load`, `fuse_protection`. | I | `test_voltage_drop`, `test_fuse_calculator_distinguishes_manufacturer_from_estimate` |
 | CALC-4 | Fuse/protection analysis is device-aware, never sizes by cable alone, and separates manufacturer-required from calculated estimate and recommended-pending-verification, capping by conductor ampacity. | I | same |
 | CALC-5 | Document-to-calculator: suggestions per input from a document's entities ranked by qualifier match and confidence; UI "Send to calculator" prefill. | I | `test_calculator_suggestions_and_run`; UI walkthrough |
+| CALC-6 | Circuit sizing from the owner's confirmed ABYC E-11 tables (§12.6): voltage drop (formula for any voltage, printed grid where it applies) and ampacity with engine-space and bundling derating, the larger wins, conductors in parallel when one is not enough, AWG and mm² side by side; then the fuse for that conductor and the fuse classes with enough interrupting capacity; reminders from the standard that fit. Every value cites its page; what the tables do not cover is a blank with an ask, answered by the person and marked as theirs. | I | `test_e11_reference.py` (the library's vectors), `test_e11_api.py` |
+| CALC-11 | The same engine ships as `packages/e11-calc`, a dependency-free TypeScript library held to the same vectors, for another web app. | I | `cd packages/e11-calc && npm test` |
+| REF-1 | The reference tables are imported from a table detected on a page (only cells that fit the layout are copied; the rest stay blank), corrected and confirmed by the person in the app; only a person's PUT sets `confirmed`; the owner's copy wins over the bundled one; a download hands the confirmed set to the library. | I | `test_e11_api.py::test_reference_status_and_table_round_trip`, `::test_import_drafts_a_table_from_a_detected_table` |
 
 ### 4.11 Invoices and exports (INV)
 
@@ -517,9 +520,9 @@ Document roles come from `equipment_types` and titles; any non-battery document 
 
 ### 12.1 Contracts
 
-- `InputSpec{key, label, unit, kind: number|select|text, required, default, options, help, entity_types, qualifiers}`.
+- `InputSpec{key, label, unit, kind: number|select|text, required, default, options, help, entity_types, qualifiers, answers}`. `answers` names the blank an input fills (the `field` of an ask); the UI shows such an input only while that ask is open.
 - Inputs may be plain values or `{value, unit, source}`; a source (document, page, entity) marks `origin: "document"`. Missing required inputs raise 422; numbers are parsed with thousands separators.
-- `CalcResult{calculator_id, formula, inputs (echoed with origin/source), steps[], results[{key, label, value, unit, classification, note}], assumptions[], warnings[], sources[], classification, disclaimer}`.
+- `CalcResult{calculator_id, formula, inputs (echoed with origin/source), steps[], results[{key, label, value, unit, classification, note, group}], assumptions[], warnings[], sources[], asks[], reminders[], classification, disclaimer}`. A result's `value` may be `null`: a blank, never a guess, with the reason in `note` and an entry in `asks` `{field, reason, input_key, unit, prompt}` naming the input that answers it (`input_key` null when the fix is elsewhere, e.g. the reference tables). `group` puts results together on screen. `sources` keeps what the calculator cited itself (a reference table's page) after the input sources.
 
 ### 12.2 Classification semantics
 
@@ -540,7 +543,8 @@ Document roles come from `equipment_types` and titles; any non-battery document 
 | `battery_runtime` | t = (C × V × DoD) ÷ (P ÷ η) | capacity, voltage, load (power), efficiency % (90), dod % (80) | runtime_hours, usable_energy, dc_current | no Peukert/temperature derating |
 | `alternator_charging` | t = (C × ΔSoC) ÷ (I × η) | alternator_output (current), derate % (70), capacity, optional max_charge_current (charging/maximum), soc_start (50), soc_end (90), charge_efficiency (95) | charge_current (limited by alternator or battery), hours, ah_needed | warn when alternator exceeds battery limit or rate > 0.5C |
 | `ac_load` | W = V × A × PF; VA = V × A | voltage (120), current or power, power_factor (1.0) | watts, va, amps | single-phase |
-| `fuse_protection` | I_fuse ≥ I_cont × k → next standard size, ≤ conductor ampacity | device_type (10 profiles), continuous_current, surge_current, surge_duration, system_voltage, manufacturer_fuse (fuse/breaker: recommended/required), manufacturer_max_fuse (maximum), conductor_size (wire_size), engine_space | manufacturer_required, manufacturer_maximum, calculated_estimate, conductor_ampacity, recommended, characteristic | see §12.4 |
+| `fuse_protection` | I_fuse ≥ I_cont × k → next standard size, ≤ conductor ampacity | device_type (10 profiles), continuous_current, surge_current, surge_duration, system_voltage, manufacturer_fuse (fuse/breaker: recommended/required), manufacturer_max_fuse (maximum), conductor_size (wire_size), engine_space | manufacturer_required, manufacturer_maximum, calculated_estimate, conductor_ampacity, recommended, characteristic | see §12.4; `conductor_ampacity` comes from the owner's confirmed E-11 table when there is one (note "from ABYC E-11, …, page N", `documented_value`), else the typical figure with its note |
+| `circuit_e11` | CM = K × I × L / E; ampacity × bundling factor; the larger wins; fuse ≥ load × k and ≤ conductor | system_voltage (any), current, length + unit, max_drop_percent (3/10/other + other), insulation_rating_c (105), engine_space, bundled + bundled_conductors, load_type (the 10 profiles), short_circuit_a (optional), manufacturer_fuse (optional), and the answer inputs own_ampacity_a, own_bundling_factor, own_k, own_short_circuit_a | Conductor: size_awg, size_mm2, cm_required, voltage_drop_size, printed_table_size, ampacity_size, drop_at_size; Protection: fuse_a, fuse_characteristic, interrupting; plus `reminders` | see §12.6; no Excel formulas (the sheet exports app-computed values) |
 
 ### 12.4 Fuse / circuit protection logic
 
@@ -555,6 +559,12 @@ Document roles come from `equipment_types` and titles; any non-battery document 
 
 `GET /calculators/{id}/suggest?document_id=` returns up to 6 entities per input whose `entity_types` match, ranked: preferred qualifier match first, then confidence, then page; AC voltages are demoted for `voltage` inputs; `manufacturer_fuse` excludes `maximum`-qualified values and `manufacturer_max_fuse` requires them. The UI's "Send to calculator" writes `{calculatorId, inputs}` to `sessionStorage["mdi.calculator.prefill"]` and navigates; the page merges it into the form and marks sourced inputs.
 
+### 12.6 The ABYC E-11 reference (`reference/`, `packages/e11-calc`)
+
+**No value from the standard lives in the code.** The tables come from the owner's own copy of ABYC E-11, one JSON file per printed table (`packages/e11-calc/schema/e11-table.schema.json`): `constants` (K for copper and whether the formula's L is the round trip or one way, as the page words it), `circular_mils`, `ampacity_outside_engine_space`, `ampacity_inside_engine_space` (columns keyed by insulation rating), `bundling_factors`, `voltage_drop_3pct`, `voltage_drop_10pct` (the printed grid at its nominal voltage), and `fuse_classes` (interrupting ratings typed from the makers' datasheets, each row citing its datasheet). Every table carries `source.page`; every row its own `page`; a cell may be `null` (the page prints nothing there), a page may not be missing. `status` is `draft` (copied, unusable), `confirmed` (checked against the page by a person; only a person's PUT sets it) or `fixture` (the synthetic test tables in `packages/e11-calc/tests/fixtures`, refused unless `MDI_REFERENCE_ALLOW_FIXTURE=true`). Two folders, one loader: `<data_dir>/reference/e11` (what the editor saves) wins over the bundled copy (`MDI_REFERENCE_DIR`; the library folder in a checkout, `reference/e11` inside the installed app).
+
+The procedure (`reference/e11_circuit.py`, the Python twin of `packages/e11-calc/src/circuit.ts`, same keys, held to `packages/e11-calc/tests/test-vectors.json`): (1) the circular-mil formula for any voltage, smallest listed size with enough area; (2) the printed grid where the voltage and limit match, if it asks for more it governs; (3) ampacity: the inside or outside table, the insulation column, times the bundling factor for the count, smallest size that carries the current; (4) the larger of the requirements wins (`governed_by`); when no single listed size meets both, the fewest conductors of the smallest listed size in parallel that do (`parallel`), sizes always compared by area from `circular_mils`; (5) mm² = circular mils × 0.0005067 and the nearest IEC standard metric size, both labelled as conversions; the drop at the chosen size; (6) the fuse: at least the load times its load-type factor (`profiles/device_profiles.json`, industry guidance shared by both implementations and tested against that file), rounded up to a standard size, never above the conductor's derated ampacity, else a blank saying to use a larger conductor; the fuse classes whose interrupting rating is at least the source's short-circuit current (typed from the battery datasheet, never estimated); (7) reminders whose tags (`always`, `engine_space`, `bundled`, `parallel`, the load type) fit. Out of range is never extrapolated: a blank names the page the table stops at and the `own.*` value a person can supply (`ampacity_a`, `bundling_factor`, `k`, `short_circuit_a`); an answered blank is reported with `source: {by: "you"}`. Rounding is half up in both implementations. The cheat sheet (`cheatsheet/cheatsheet.json`: topic, rule, clause, page, tags, status) renders to byte-identical Markdown in both.
+
 ## 13. Invoices and exports
 
 - Triggered when `document_type` is Invoice or Receipt. Fields: vendor (largest-font non-"invoice" block on page 1), invoice_number (first `Invoice/Receipt/Order/Ref No: X` containing a digit), invoice_date, currency (word or symbol), subtotal, tax, total (preferring "grand total / amount due / balance due" labels), line items from patterns `desc qty[unit] unit_price total`, `qty desc unit_price total`, `desc total`; a line whose qty × unit price equals the total gets confidence 0.95.
@@ -564,7 +574,7 @@ Document roles come from `equipment_types` and titles; any non-battery document 
 
 - Each `CalculatorSpec` carries an ordered `excel` list of rows `{key, label, unit, kind: helper|result|text, classification, formula}`. `formula` is an Excel template; the builder expands placeholders to cell references: `{key}` → `N($B$n)` for number inputs (blank or text counts as 0, so optional inputs can be tested with `>0`), `{raw:key}` → the cell, `{pct:key}` → `IF(N(c)>1,N(c)/100,N(c))` (accepts 90 or 0.9), `{h:name}` → an earlier helper row, `{r:key}` → an earlier result row. Rows are written in list order in one "Calculation" block so every reference points upward.
 - Lookups use named ranges on the `Reference` sheet written from `calculators/tables.py` and `DEVICE_PROFILES`: `AwgTable` (AWG, Ω/kft, ampacity, mm²), `Mm2Table`, `FuseSizes`, `DeviceTable` (key, k, label, characteristic). Next-standard-size-up is `INDEX(FuseSizes, IFERROR(MATCH(x-1e-6, FuseSizes, 1)+1, 1))`; conductor keys are normalised in-sheet with `SUBSTITUTE/UPPER/TRIM` so "4/0 AWG", "#4/0" and "4/0" all resolve.
-- Deliberate simplifications versus the Python modules (documented on the sheet): `battery_main` ampacity clamp and mm² ampacity interpolation are not reproduced; the app value column shows any difference.
+- Deliberate simplifications versus the Python modules (documented on the sheet): `battery_main` ampacity clamp and mm² ampacity interpolation are not reproduced; the app value column shows any difference. `circuit_e11` has no spreadsheet formulas at all (a two-dimensional table lookup with blank propagation is deferred): its sheet carries the app-computed values only.
 - Inputs: green fill, blue font when sourced from a document, `Source` column `HYPERLINK` to the page/bbox deep link; results amber; helpers grey. The app's `CalcResult` values go in column E; when the app cannot run the calculation (missing inputs) the sheet is still written with the error noted and the formulas return blanks until the green cells are filled.
 
 ### 13.2 PDF outputs and conversions (`exports/pdf.py`, `exports/convert.py`)
@@ -614,6 +624,8 @@ Overlay geometry: `left = bbox.x0 / page.width × 100 %`, `top = bbox.y0 / page.
 | `INGEST_WORKERS` | 2 | thread-pool size |
 | `FRONTEND_DIST` | `<repo>/frontend/dist` | static UI location |
 | `MAX_UPLOAD_MB` | 200 | per file |
+| `REFERENCE_DIR` | `<repo>/packages/e11-calc` | the bundled ABYC E-11 reference (`tables/`, `cheatsheet/`); the launcher sets it to `reference/e11` inside the installed app. The owner's own copy under `<DATA_DIR>/reference/e11` wins over it. |
+| `REFERENCE_ALLOW_FIXTURE` | false | tests only: accept the synthetic fixture tables |
 
 ## 16. Testing and acceptance
 
@@ -630,8 +642,10 @@ Generated with PyMuPDF at test time: a 4-page inverter installation manual (titl
 | `test_qc.py` | low-confidence flags, discrepancies, qualifier exemption, range checks, AWG cross-reference |
 | `test_pipeline_api.py` | upload→process for text PDF, scanned PDF (OCR bbox agreement), photo; pages/blocks/images; spec extraction; QC; search channels; extractive QA; not-found; calculators and suggestions; fuse classification; voltage drop; invoice and exports; comparison; diagram heuristic and 204; delete |
 | `test_compare_conflicts.py` | all five conflict rules on synthetic inverter + battery manuals |
+| `test_e11_reference.py` | the Python twin of `packages/e11-calc` on the library's shared vectors (every case, including answered blanks); loader refusals; the owner's folder wins over the bundled one; the cheat-sheet render equals the shared file; the profiles equal the shared contract; a guard on the owner's real tables once present |
+| `test_e11_api.py` | the circuit calculator over the API (cited pages, groups, asks, an answered blank, parallel conductors, a fuse that would exceed the conductor, the workbook export); `fuse_protection` preferring E-11; `voltage_drop`'s E-11 rows; the reference endpoints (status, save, confirm, refuse, delete, download, import from a detected table, the cheat sheet) |
 
-Run: `cd backend && python -m pytest -q` (34 tests, ~7 s; requires Tesseract). Tests run with `MDI_AI_ENABLED=false` and `MDI_BACKGROUND_PROCESSING=false` in an isolated data dir.
+Run: `cd backend && python -m pytest -q` (158 tests, one skipped until the owner's tables exist; requires Tesseract). Tests run with `MDI_AI_ENABLED=false`, `MDI_BACKGROUND_PROCESSING=false` and the E-11 reference pointed at the library's synthetic fixture, in an isolated data dir. The library's own tests: `cd packages/e11-calc && npm test` (41, `node --test`).
 
 ### 16.3 UI acceptance walkthrough
 
@@ -656,7 +670,8 @@ With the app running and the sample documents uploaded, a Playwright script (kep
 | Semantic search | Default provider is lexical (hashed TF-IDF); recall for paraphrases is limited without Voyage or a local transformer. |
 | AI path | The live Claude request/response path (structured output, citation verification on real answers) is not exercised in CI; only the fallback is. `MDI_AI_EFFORT` is read but not sent. |
 | Comparison | Document roles are inferred from equipment keywords/titles; unusual documents may be mis-roled and skip conflict checks. |
-| Calculators | Ampacity and resistance tables are typical published values, not a standards implementation; no temperature correction in voltage drop; standard fuse series is generic. Workbook formulas omit the `battery_main` ampacity clamp and mm² ampacity interpolation (§13.1). |
+| Calculators | The older calculators' ampacity and resistance tables are typical published values (they prefer the owner's confirmed E-11 ampacity when it exists); no temperature correction in voltage drop; the standard fuse series is generic. `circuit_e11` uses only the owner's confirmed tables and has no Excel formulas. Workbook formulas omit the `battery_main` ampacity clamp and mm² ampacity interpolation (§13.1). |
+| Reference | Importing a table from a page copies only cells that fit the layout; a table the app did not detect on the page (no ruling lines) is typed in by hand. The tables and the cheat sheet are copied from a paid standard and are for the owner's private use. |
 | Exports | Report PDFs are text-only (no page thumbnails or highlight crops); searchable-PDF word placement is only as good as the OCR boxes; workbooks are unsigned openpyxl files, so Excel shows formula results only after opening (no cached values). |
 | Platform | SQLite single-node; FTS5 query is SQLite-specific so `MDI_DATABASE_URL` pointing elsewhere would need an FTS replacement; no authentication or multi-tenancy; CORS is `*`. |
 | UI | Viewer renders are images (the searchable-PDF export carries the text layer instead); no annotation persistence; e2e script not in repo. |
@@ -690,8 +705,7 @@ All items **Planned**. IDs continue the numbering of §4.
 
 | ID | Item |
 |---|---|
-| CALC-6 | Cable sizing: ampacity (insulation rating, bundling, engine space) + voltage drop → recommended size per circuit, with sources for load values. |
-| CALC-7 | Protection coordination: fuse/breaker series checks, interrupt rating vs bank short-circuit current, time-current curve data. |
+| CALC-7 | Protection coordination: fuse/breaker series checks, time-current curve data (the interrupting-rating check is in CALC-6). |
 | CALC-8 | Load schedule builder: AC and DC load tables with duty cycles, peak/continuous totals, export. |
 | CALC-9 | Battery bank and charging design: capacity from load schedule, charge sources vs acceptance, alternator integration (external regulator, DC-DC). |
 | CALC-10 | Calculation traceability: persist calculations with input sources and link them from documents. |

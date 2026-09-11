@@ -10,7 +10,16 @@ backend/app/     ingest → ocr → structure → extraction → qc → search �
 frontend/src/    pages/ and components/, one stylesheet (styles.css)
 desktop/         launcher.py, PyInstaller spec, build.py, smoke.py
 docs/            SPEC.md (contracts), API.md (endpoints), UI.md (interface)
+packages/e11-calc  the ABYC E-11 circuit engine as a dependency-free TypeScript
+                 library; backend/app/reference is its Python twin, both held to
+                 packages/e11-calc/tests/test-vectors.json
 ```
+
+**No value from ABYC E-11 is ever typed into the code.** The tables come from
+the owner's own copy, imported from a page and confirmed by them in the app;
+a case the tables do not cover is a blank with an ask, never an extrapolation.
+Unit conversions and industry lists (fuse sizes, metric sizes, load profiles)
+are labelled as such.
 
 ## The rule the product rests on
 
@@ -23,8 +32,9 @@ this — not for speed, not for a tidier screen, not for a shorter flow.
 
 ## Working here
 
-- **Tests:** `cd backend && python -m pytest` (124 tests). They must pass
-  before a commit.
+- **Tests:** `cd backend && python -m pytest` (158 tests, one skipped until
+  the owner's tables exist) and `cd packages/e11-calc && npm test` (41). They
+  must pass before a commit.
 - **UI build:** `cd frontend && npm run build`.
 - **The built app:** `python desktop/build.py`, then
   `python desktop/smoke.py dist/MarineDocIntelligence/MarineDocIntelligence`.

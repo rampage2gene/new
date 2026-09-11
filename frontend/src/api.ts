@@ -1,4 +1,4 @@
-import type { Answer, CalcResult, CalculatorSpec, CompareResult, DiagnosticsInfo as Diagnostics, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, Invoice, LanInfo, PageData, QCFlag, SearchResponse, SpecExtraction, Status } from "./types";
+import type { Answer, CalcResult, CalculatorSpec, CheatSheetResponse, CompareResult, DetectedTable, DiagnosticsInfo as Diagnostics, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, Invoice, LanInfo, PageData, QCFlag, ReferenceStatus, ReferenceTable, SearchResponse, SpecExtraction, Status } from "./types";
 
 /* ------------------------------------------------------------------ pairing
  * The desktop app also serves the UI on the local network so a phone on the
@@ -316,6 +316,16 @@ export const api = {
   calculators: () => request<CalculatorSpec[]>("/api/calculators"),
   runCalculator: (id: string, inputs: Record<string, unknown>) => request<CalcResult>(`/api/calculators/${id}/run`, json({ inputs })),
   suggestInputs: (id: string, documentId: string) => request<{ suggestions: Record<string, Entity[]> }>(`/api/calculators/${id}/suggest?document_id=${documentId}`),
+  // The owner's ABYC E-11 reference: tables imported, corrected and confirmed in the app, and the reminders.
+  referenceE11: () => request<ReferenceStatus>("/api/reference/e11"),
+  referenceTable: (id: string) => request<ReferenceTable>(`/api/reference/e11/tables/${id}`),
+  saveReferenceTable: (id: string, table: Record<string, unknown>) => request<ReferenceTable>(`/api/reference/e11/tables/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(table) }),
+  deleteReferenceTable: (id: string) => request<ReferenceTable>(`/api/reference/e11/tables/${id}`, { method: "DELETE" }),
+  importReferenceTable: (id: string, body: { document_id: string; page: number; table_index: number }) => request<ReferenceTable>(`/api/reference/e11/tables/${id}/import`, json(body)),
+  detectedTables: (documentId: string) => request<DetectedTable[]>(`/api/reference/e11/documents/${documentId}/tables`),
+  referenceCheatSheet: () => request<CheatSheetResponse>("/api/reference/e11/cheatsheet"),
+  saveCheatSheet: (body: Record<string, unknown>) => request<CheatSheetResponse>("/api/reference/e11/cheatsheet", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  referenceDownloadUrl: () => "/api/reference/e11/download",
   invoices: () => request<Invoice[]>("/api/invoices"),
   exportEntitiesUrl: (format: string, documentIds?: string[]) => `/api/export/entities?format=${format}${(documentIds || []).map((d) => `&document_ids=${d}`).join("")}`,
   exportInvoicesUrl: (format: string, report: string) => `/api/export/invoices?format=${format}&report=${report}`,

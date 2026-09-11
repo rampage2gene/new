@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.2.0 - 2026-09-11
+
+A circuit calculator built on your own copy of ABYC E-11, and the same
+engine as a library you can put in another web app. Nothing from the
+standard is typed into the app: the tables come from your copy, checked and
+confirmed by you, and what they do not cover comes back as a blank you fill in.
+
+- Added: **Circuit: conductor and protection (ABYC E-11)** in Calculators.
+  From current, one-way length and any nominal voltage it gives the
+  conductor size for the voltage drop (the formula for any voltage, the
+  printed 12 V table where it applies), the size for the current it must
+  carry with engine-space and bundling derating, the larger of the two, and
+  conductors in parallel when one is not enough - AWG and mm² side by side,
+  every number with its page. Then the fuse for that conductor (never above
+  what the conductor can carry, at least the load times its factor), which
+  fuse classes have enough interrupting capacity for your battery bank, and
+  the reminders from the standard that apply (fuse placement, engine rooms,
+  paralleling).
+- Added: **a blank you can answer.** Where a table does not cover the case -
+  a current past the table, an insulation rating it has no column for, a
+  bundle count it has no row for - the result says so, cites the page the
+  table stops at, and shows a box for the value from the page. What you type
+  is marked as yours, and the calculation runs again at once.
+- Added: **ABYC E-11 reference**, at the end of the Calculators list. Import
+  each table from a page of your copy of the standard (the app copies the
+  cells it can read and highlights the ones it could not), correct them, and
+  press *Confirm this table*. Only you can confirm; a draft is never used.
+  Your reminders live there too, each with its clause and page. *Download
+  for the web app* hands the confirmed set to the library.
+- Added: `packages/e11-calc`, a dependency-free JavaScript/TypeScript library
+  with the same engine, held to the same test cases as the app, for another
+  web app of yours. The tables are for your private use: the standard is a
+  paid document.
+- Changed: **Fuse & Circuit Protection** uses your confirmed E-11 ampacity
+  for a conductor size when there is one, and says so; otherwise the typical
+  figure with its old note. **Voltage Drop** adds the size the E-11 formula
+  asks for at 3 % and 10 %.
+- Settings: `MDI_REFERENCE_DIR` (the bundled reference; what you confirm in
+  the app is saved under the data folder and wins over it).
+
 ## v0.1.9 - 2026-09-11
 
 The app left values blank and waited for you, but did not say what it was

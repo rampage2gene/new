@@ -52,6 +52,8 @@ const ROUTES = [
   ["document-qc", "/documents/{doc}?tab=qc"],
   ["search", "/search"],
   ["calculators", "/calculators"],
+  ["calculator-circuit", "/calculators/circuit_e11"],
+  ["reference", "/calculators/reference"],
   ["compare", "/compare"],
   ["invoices", "/invoices"],
   ["convert", "/convert"],
@@ -60,6 +62,39 @@ const ROUTES = [
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * What to do on a screen before photographing it, so the pictures show the
+ * states that matter and not an empty form. Each step waits for its own
+ * effect; the screenshot still fails only on sideways scrolling.
+ */
+const ACT = {
+  // A circuit the synthetic tables can size, with the short-circuit current
+  // left out on purpose: the result then carries a blank with its ask box.
+  "calculator-circuit": async (page) => {
+    const fill = async (label, value) => {
+      const box = page.locator("label.field", { hasText: label }).first().locator("input, select").first();
+      if ((await box.count()) === 0) return;
+      if ((await box.evaluate((el) => el.tagName)) === "SELECT") await box.selectOption(value);
+      else await box.fill(String(value));
+    };
+    await fill("System voltage", 12);
+    await fill("Circuit current", 30);
+    await fill("One-way length", 5);
+    await page.getByRole("button", { name: "Calculate", exact: true }).click().catch(() => {});
+    await page.locator(".calc-result").waitFor({ timeout: 15000 }).catch(() => {});
+    await page.locator(".calc-result").scrollIntoViewIfNeeded().catch(() => {});
+  },
+  // One table opened, with a fresh row whose cells are still empty: the
+  // highlighted "from the page" cells and the refused Confirm are the point.
+  reference: async (page) => {
+    await page.locator("tr", { hasText: /circular mils/i }).first().getByRole("button").click().catch(() => {});
+    await page.locator(".ref-grid").waitFor({ timeout: 15000 }).catch(() => {});
+    await page.getByRole("button", { name: "+ Add a row" }).click().catch(() => {});
+    await page.locator(".ref-grid").scrollIntoViewIfNeeded().catch(() => {});
+    await sleep(300);
+  },
+};
 
 /** A Chromium already on this machine, whatever build Playwright expects. */
 function findChromium() {
@@ -110,6 +145,11 @@ async function startFixture() {
       MDI_INBOX_WATCHER: "false",
       MDI_AI_ENABLED: "false",
       MDI_LAN: "false",
+      // The E-11 reference: the library's synthetic fixture, so the circuit
+      // calculator and the reference editor have something to show. The
+      // screens say it is test data.
+      MDI_REFERENCE_DIR: join(REPO, "packages", "e11-calc", "tests", "fixtures"),
+      MDI_REFERENCE_ALLOW_FIXTURE: "true",
     },
   });
   const base = `http://127.0.0.1:${PORT}`;
@@ -167,6 +207,7 @@ async function shoot(base, docId) {
       const url = base + route.replace("{doc}", docId);
       await page.goto(url, { waitUntil: "networkidle" }).catch(() => {});
       await sleep(600); // let the first fetches paint
+      if (ACT[name]) await ACT[name](page);
       const file = join(OUT, `${name}.${size.name}.png`);
       await page.screenshot({ path: file, fullPage: true });
 

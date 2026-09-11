@@ -86,6 +86,12 @@ jobs:
         run: python -m pytest -q
         working-directory: backend
 
+      # The circuit engine ships as a library too; both copies are held to the
+      # same vectors, so the library's tests run beside the backend's.
+      - name: E-11 library tests
+        run: npm ci && npm test
+        working-directory: packages/e11-calc
+
       - name: Build application
         run: python desktop/build.py
 

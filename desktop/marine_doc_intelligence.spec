@@ -73,7 +73,7 @@ if sys.platform == "darwin":
         icon=str(ICON),
         bundle_identifier="com.rampage2gene.marine-doc-intelligence",
         info_plist={
-            "CFBundleShortVersionString": "0.1.9",
+            "CFBundleShortVersionString": "0.2.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },

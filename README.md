@@ -60,6 +60,8 @@ Storage (all separate, all swappable)
     └─ Search index         chunks_fts (FTS5) + embeddings table
 AI reasoning layer (app/ai): cited QA, diagram vision, comparison
 Calculator engine (app/calculators): registry of modules with sourced inputs
+ABYC E-11 reference (app/reference): the owner's confirmed tables and reminders,
+    the Python twin of packages/e11-calc (a dependency-free library for other web apps)
 ```
 
 Every stage exchanges plain data structures (`RawPage`/`RawBlock`, `ExtractedEntity`,
@@ -157,7 +159,8 @@ docker run -p 8000:8000 -v mdi-data:/data -e MDI_ANTHROPIC_API_KEY=sk-ant-... ma
 | `POST /api/ask` | Cited question answering (`document_ids`, optional `history`) |
 | `POST /api/compare` | Cross-document comparison, conflicts, optional question |
 | `POST /api/documents/{id}/pages/{n}/diagram` | Diagram analysis with confidence tiers |
-| `GET /api/calculators`, `POST /api/calculators/{id}/run`, `GET /api/calculators/{id}/suggest` | Calculator specs, execution, document-to-calculator suggestions |
+| `GET /api/calculators`, `POST /api/calculators/{id}/run`, `GET /api/calculators/{id}/suggest` | Calculator specs, execution, document-to-calculator suggestions; `circuit_e11` sizes a circuit from the owner's E-11 tables and asks for what they do not cover |
+| `GET /api/reference/e11`, `PUT /api/reference/e11/tables/{id}`, `POST …/tables/{id}/import`, `GET /api/reference/e11/download` | The owner's ABYC E-11 reference: tables imported from a page, corrected, confirmed, and downloaded for the `e11-calc` library |
 | `GET /api/invoices`, `GET /api/export/invoices`, `GET /api/export/entities` | Invoice data and CSV/XLSX/JSON exports |
 | `GET /api/export/workbook`, `POST /api/calculators/{id}/export` | Excel workbooks with live formulas |
 | `GET /api/documents/{id}/export/{searchable-pdf\|report.pdf\|txt\|md\|json}`, `POST /api/export/report.pdf` | PDF outputs and text exports |
@@ -184,6 +187,7 @@ Reading and checking scanned pages:
 | `MDI_VERIFY_AI` | `true` | When an Anthropic key is configured, show the remaining blanks to the model with the page image. Nothing leaves the machine without a key. |
 | `MDI_AI_VERIFY_MAX_PAGES` | `60` | Cost guard for that check. |
 | `MDI_AUTO_EXPORT` | `true` | Write `<data dir>/exports/<name>/` (OCR'd PDF, clean text PDF, workbook, CSV, JSON, text) for every processed document and again after each edit. |
+| `MDI_REFERENCE_DIR` | `packages/e11-calc` | The bundled ABYC E-11 reference (tables and reminders). What you import, correct and confirm in the app is saved under `<data dir>/reference/e11` and wins over it. The app carries no value from the standard of its own. |
 
 Using it from a phone on the same Wi-Fi ([desktop/README.md](desktop/README.md#use-on-your-phone)):
 
@@ -199,9 +203,11 @@ Using it from a phone on the same Wi-Fi ([desktop/README.md](desktop/README.md#u
   labelled components as *possible*.
 * The default semantic index is a local hashed TF-IDF model; configure Voyage or add a
   local transformer provider for stronger semantic recall.
-* Ampacity and resistance tables are typical published values and must be verified
-  against the applicable standard and the wire's actual rating.
+* The older calculators' ampacity and resistance tables are typical published values
+  (they prefer your confirmed E-11 ampacity when it exists); the circuit calculator
+  uses only the tables you confirmed from your own copy of ABYC E-11, which are for
+  your private use - the standard is a paid document.
 
-Planned: system-level analysis, cable sizing and protection design, wiring-diagram
+Planned: system-level analysis, protection coordination, wiring-diagram
 generation, battery bank and charging system design, automated bills of materials and
 job estimates - the modules above are the foundation for a marine electrical AI copilot.

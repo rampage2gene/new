@@ -156,7 +156,9 @@ Errors use FastAPI's `{"detail": "..."}` shape. Status codes beyond 200: 201 upl
  "assumptions": ["…"], "warnings": ["…"], "sources": [SourceRef], "classification": "recommended_pending_verification", "disclaimer": "…"}
 ```
 
-`origin` ∈ `user | document | default`. Input `kind` ∈ `number | select | text`.
+`origin` ∈ `user | document | default`. Input `kind` ∈ `number | select | text`. An input with `answers` (the `field` of an ask) is one a person fills in when a result came back blank.
+
+A result's `value` may be `null`: a blank, never a guess. Its `note` says why and `CalcResult.asks` lists `{field, reason, input_key, unit, prompt}` for each blank, `input_key` naming the input that answers it (`null` when the fix is elsewhere, such as the reference tables). Results may carry a `group` ("Conductor", "Protection") and the result a `reminders` list of `{topic, rule, clause, page, applies_to, status}` from the owner's E-11 cheat sheet.
 
 ### DiagramAnalysis
 
@@ -265,7 +267,25 @@ Every upload is logged by the `app.api.documents` logger, so an upload failure t
 | `GET /calculators` | — | `[CalculatorSpec]` |
 | `POST /calculators/{calc_id}/run` | `{"inputs": {key: value \| {"value", "unit", "source": SourceRef}}}` | `CalcResult`; 422 with the validation message (missing required input, non-numeric, unknown conductor size, unknown calculator) |
 | `GET /calculators/{calc_id}/suggest` | `document_id` | `{"calculator": id, "document": {id, name}, "suggestions": {input_key: [Entity ≤6]}}` (only inputs with `entity_types`) |
-| `POST /calculators/{calc_id}/export` | same body as `run` | attachment `<calc_id>.xlsx`: the calculator as a sheet whose inputs are editable cells and whose results are Excel formulas (plus a `Reference` sheet of lookup tables); 422 when the app cannot run the calculation with the given inputs |
+| `POST /calculators/{calc_id}/export` | same body as `run` | attachment `<calc_id>.xlsx`: the calculator as a sheet whose inputs are editable cells and whose results are Excel formulas (plus a `Reference` sheet of lookup tables); 422 when the app cannot run the calculation with the given inputs. `circuit_e11` has no formulas: its sheet holds the app-computed values |
+
+`circuit_e11` ("Circuit: conductor and protection (ABYC E-11)") computes only from the owner's confirmed reference tables (below). Its results come in two groups plus `reminders`; a blank (`value: null`) carries an ask whose `input_key` is one of `own_ampacity_a`, `own_bundling_factor`, `own_k`, `own_short_circuit_a` - send that input with the person's value and run again; the answered part is then noted "entered by you". With no confirmed table at all it returns one blank whose ask has `"field": "reference"`.
+
+### The ABYC E-11 reference
+
+The tables the circuit calculator computes with, copied from the owner's own copy of the standard and confirmed by them; shape in `packages/e11-calc/schema/e11-table.schema.json`. The owner's saved copy (under the data folder) wins over the copy bundled with the app. Only a `PUT` with `"status": "confirmed"` makes a table usable.
+
+| Method & path | Request | Response |
+|---|---|---|
+| `GET /reference/e11` | — | `{installed, confirmed: [ids], missing: [ids], fixture, folders: {yours, bundled}, tables: [{id, kind, title, page, status: missing\|draft\|confirmed\|fixture, rows, origin: yours\|bundled, document_id, layout: {title}}], cheatsheet: {entries, origin}}` |
+| `GET /reference/e11/tables/{id}` | — | the table file plus `origin` and `layout`; `{status: "missing", layout}` when there is none |
+| `PUT /reference/e11/tables/{id}` | the table file with `status` `draft` or `confirmed` | the saved table; 422 with the loader's reason (no page, a row without a page, a fixture, a fuse class without its datasheet); 404 for an unknown id |
+| `DELETE /reference/e11/tables/{id}` | — | the table as it now is (the bundled copy, or missing) |
+| `POST /reference/e11/tables/{id}/import` | `{"document_id", "page", "table_index": 0}` | a draft copied from the table the app detected there: cells whose row label and column header fit the layout are copied, the rest stay blank and `edits` marks what to check; 404 when no table was detected on that page; 422 for `fuse_classes` (typed from datasheets) |
+| `GET /reference/e11/documents/{document_id}/tables` | — | `[{page, table_index, header, rows, section}]`, the tables the app detected in the document |
+| `GET /reference/e11/cheatsheet` | — | `{source, entries: [{topic, rule, clause, page, applies_to, status}], markdown, origin}` |
+| `PUT /reference/e11/cheatsheet` | `{source: {document, edition}, entries: [...]}` | the saved sheet; 422 for an entry without a clause or a page |
+| `GET /reference/e11/download` | — | attachment `e11-reference.zip`: `tables/*.json` (confirmed only), `cheatsheet/cheatsheet.{json,md,html}`, `README.txt` - the layout `packages/e11-calc` reads |
 
 ### Invoices and exports
 

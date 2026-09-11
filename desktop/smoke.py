@@ -210,6 +210,16 @@ def main() -> int:
                 print(f"diagnostics: log_path={diag.get('log_path')} tesseract={diag.get('tesseract_version')}")
             except Exception as exc:
                 print(f"diagnostics failed: {type(exc).__name__}: {exc}")
+            # The E-11 reference must answer inside the built app (the bundled
+            # folder is found when frozen); with no confirmed tables every one
+            # is "missing", and the calculator says so rather than guessing.
+            try:
+                with urllib.request.urlopen(base + "/api/reference/e11", timeout=5) as r:
+                    ref = json.loads(r.read())
+                print(f"reference: installed={ref.get('installed')} missing={len(ref.get('missing') or [])} bundled={(ref.get('folders') or {}).get('bundled')}")
+            except Exception as exc:
+                print(f"reference check failed: {type(exc).__name__}: {exc}")
+                ref = None
             pdf = data_dir / "smoke-sample.pdf"
             make_sample_pdf(pdf)
             # First: the document whose reader crashes on its scanned page.
@@ -287,6 +297,9 @@ def main() -> int:
     elif not (data_dir / "logs" / "ocr-worker.log").exists():
         ok = False
         print("FAILED: the OCR reader wrote no logs/ocr-worker.log")
+    elif not ref or "tables" not in ref:
+        ok = False
+        print("FAILED: /api/reference/e11 did not answer with the table list (is reference/e11 bundled?)")
     elif "rapidocr" not in ((doc.get("stats") or {}).get("ocr_engines") or []):
         ok = False
         print("FAILED: the RapidOCR reader did not come back after its crash (stats.ocr_engines of the second document)")
