@@ -18,7 +18,9 @@ test("reminders are picked by tag, with 'always' always in", () => {
 });
 
 test("the Markdown render is byte-identical to the shared expectation (the Python copy is held to the same file)", () => {
-  const expected = readFileSync(join(HERE, "cheatsheet-expected.md"), "utf8");
+  // Folded to LF so a checkout that rewrote the file's line endings (Windows
+  // without .gitattributes) still compares the same text.
+  const expected = readFileSync(join(HERE, "cheatsheet-expected.md"), "utf8").replace(/\r\n/g, "\n");
   assert.equal(renderMarkdown(fixtureSheet()), expected);
 });
 
