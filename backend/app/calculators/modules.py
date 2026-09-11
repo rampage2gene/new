@@ -155,15 +155,31 @@ def _voltage_drop(i: dict[str, InputValue]) -> CalcResult:
         warnings.append("Voltage drop exceeds 10 % (the usual limit for non-critical circuits). Increase conductor size.")
     elif pct > 3:
         warnings.append("Voltage drop exceeds 3 % (the usual limit for critical circuits such as electronics, bilge pumps and navigation lights).")
+    results = [
+        ResultValue("voltage_drop", "Voltage drop", round(vd, 3), "V"),
+        ResultValue("percent", "Voltage drop", round(pct, 2), "%"),
+        ResultValue("voltage_at_load", "Voltage at load", round(v - vd, 2), "V"),
+        ResultValue("resistance", "Circuit resistance", round(r_total * 1000, 2), "mΩ"),
+    ]
+    # With the owner's E-11 tables confirmed, say what size the standard's own
+    # formula asks for at each limit - from its pages, not from these constants.
+    from ..reference import e11_tables
+    from ..reference.e11_sizing import is_blank, length_ft, required_circular_mils, size_for_circular_mils
+
+    tables = e11_tables.get_tables()
+    for limit in (3, 10):
+        cm = required_circular_mils(v, amps, length_ft(length, "ft" if length_unit.startswith("f") else "m"), limit, tables)
+        if is_blank(cm):
+            continue
+        pick = size_for_circular_mils(cm["value"], tables)
+        if is_blank(pick):
+            results.append(ResultValue(f"e11_size_{limit}pct", f"Size for a {limit} % drop by the ABYC E-11 formula", None, "AWG", classification="documented_value", note=pick["reason"]))
+        else:
+            results.append(ResultValue(f"e11_size_{limit}pct", f"Size for a {limit} % drop by the ABYC E-11 formula", f"{pick['size_awg']} AWG", None, classification="documented_value", note=f"{fmt(cm['value'])} circular mils needed (K = {fmt(cm['k'])}, {pick['source']['title']}, page {pick['source']['page']})"))
     return CalcResult(
         calculator_id="voltage_drop", calculator_name="Voltage Drop", formula="V_drop = I × R_per_m × 2 × L", inputs=i,
         steps=steps,
-        results=[
-            ResultValue("voltage_drop", "Voltage drop", round(vd, 3), "V"),
-            ResultValue("percent", "Voltage drop", round(pct, 2), "%"),
-            ResultValue("voltage_at_load", "Voltage at load", round(v - vd, 2), "V"),
-            ResultValue("resistance", "Circuit resistance", round(r_total * 1000, 2), "mΩ"),
-        ],
+        results=results,
         assumptions=[
             "Conductor resistance at 20 °C; at 60 °C copper resistance is ≈16 % higher.",
             "Length is the one-way distance; both conductors are the same size (round trip = 2 × length).",
@@ -410,11 +426,25 @@ DEVICE_PROFILES: dict[str, dict] = {
 }
 
 
-def _ampacity(size: str | None, engine_space: bool) -> tuple[float | None, str | None]:
+TYPICAL_NOTE = "Typical published value; verify against the wire's actual rating"
+
+
+def _ampacity(size: str | None, engine_space: bool) -> tuple[float | None, str | None, str | None]:
+    """A conductor's allowable current: from the owner's confirmed ABYC E-11
+    table when there is one (the engine-space table is already derated as
+    the standard prints it), else the typical figures in tables.py, and a
+    note that says which. Returns (amps, size label, note)."""
     if not size:
-        return None, None
+        return None, None, None
     kind, key = _parse_size(size)
     if kind == "awg":
+        from ..reference import e11_tables
+        from ..reference.e11_sizing import ampacity_of, is_blank
+
+        found = ampacity_of(key, 105, engine_space, e11_tables.get_tables())
+        if not is_blank(found):
+            src = found["source"]
+            return float(found["ampacity_a"]), f"{key} AWG", f"from ABYC E-11, {src['title']}, page {src['page']}"
         amp = T.AWG_AMPACITY_105C.get(key)
         label = f"{key} AWG"
     else:
@@ -429,10 +459,10 @@ def _ampacity(size: str | None, engine_space: bool) -> tuple[float | None, str |
                 amp = a0 + (a1 - a0) * (key - lower) / (upper - lower)
         label = f"{key:g} mm²"
     if amp is None:
-        return None, label
+        return None, label, None
     if engine_space:
         amp *= T.ENGINE_SPACE_DERATE_105C
-    return amp, label
+    return amp, label, TYPICAL_NOTE
 
 
 def _fuse_protection(i: dict[str, InputValue]) -> CalcResult:
@@ -446,7 +476,7 @@ def _fuse_protection(i: dict[str, InputValue]) -> CalcResult:
     mfr_max = num(i, "manufacturer_max_fuse")
     size = i["conductor_size"].value
     engine_space = str(i["engine_space"].value).lower() in ("true", "yes", "1")
-    ampacity, size_label = _ampacity(size, engine_space)
+    ampacity, size_label, amp_note = _ampacity(size, engine_space)
 
     steps: list[str] = []
     warnings: list[str] = []
@@ -491,8 +521,9 @@ def _fuse_protection(i: dict[str, InputValue]) -> CalcResult:
     # 3. Conductor protection check -----------------------------------------------------
     if size_label:
         if ampacity:
-            steps.append(f"Conductor {size_label}: typical ampacity ≈{fmt(ampacity)} A (105 °C insulation{', engine space derated' if engine_space else ''})")
-            results.append(ResultValue("conductor_ampacity", f"Conductor ampacity ({size_label})", round(ampacity), "A", classification="calculated_estimate", note="Typical published value; verify against the wire's actual rating"))
+            typical = amp_note == TYPICAL_NOTE
+            steps.append(f"Conductor {size_label}: {'typical ampacity ≈' if typical else 'ampacity '}{fmt(ampacity)} A (105 °C insulation{', engine space' if engine_space else ''}{'' if typical else '; ' + amp_note})")
+            results.append(ResultValue("conductor_ampacity", f"Conductor ampacity ({size_label})", round(ampacity), "A", classification="calculated_estimate" if typical else "documented_value", note=amp_note))
             if cont and cont > ampacity:
                 warnings.append(f"Continuous current {fmt(cont)} A exceeds the conductor ampacity (~{fmt(ampacity)} A). Increase the conductor size.")
         else:
@@ -581,9 +612,135 @@ FUSE_PROTECTION = Calculator(
 )
 
 
+# --------------------------------------------------------------------------- circuit: conductor and protection (ABYC E-11)
+
+def _yes(v) -> bool:
+    return str(v).lower() in ("true", "yes", "1")
+
+
+# The `own.*` fields the reference engine asks for -> the answer inputs below.
+ANSWER_INPUTS = {"own.ampacity_a": "own_ampacity_a", "own.bundling_factor": "own_bundling_factor", "own.k": "own_k", "own.short_circuit_a": "own_short_circuit_a"}
+
+
+def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
+    """The whole procedure for one circuit from the owner's E-11 tables; see
+    app.reference.e11_circuit. Every number cites a page or says "you"; a
+    blank is a request with the input that answers it."""
+    from ..reference import e11_cheatsheet, e11_tables
+    from ..reference.e11_circuit import size_circuit
+    from ..reference.e11_tables import TABLE_IDS, usable
+    from .base import SourceRef
+
+    limit_sel = str(i["max_drop_percent"].value or "3")
+    limit = num(i, "max_drop_other") if limit_sel == "other" else float(limit_sel)
+    if not limit or limit <= 0:
+        raise CalculationError("Give the drop limit as a percentage above zero")
+    bundled = int(num(i, "bundled_conductors") or 2) if _yes(i["bundled"].value) else 2
+    inputs = {
+        "system_voltage": num(i, "system_voltage"), "current": num(i, "current"), "length": num(i, "length"), "length_unit": (i["length_unit"].value or "m").lower()[:1].replace("f", "ft").replace("m", "m"),
+        "max_drop_percent": limit, "insulation_rating_c": num(i, "insulation_rating_c") or 105, "engine_space": _yes(i["engine_space"].value),
+        "bundled_conductors": bundled, "load_type": i["load_type"].value or "resistive", "short_circuit_a": num(i, "short_circuit_a"), "manufacturer_fuse_a": num(i, "manufacturer_fuse"),
+    }
+    own = {key.split(".", 1)[1]: num(i, inp) for key, inp in ANSWER_INPUTS.items() if num(i, inp) is not None}
+    tables = e11_tables.get_tables()
+    sheet, _ = e11_cheatsheet.get_cheatsheet()
+    common = dict(calculator_id="circuit_e11", calculator_name="Circuit: conductor and protection (ABYC E-11)", formula="CM = K × I × L / E; ampacity × bundling factor; the larger wins; fuse ≥ load × k and ≤ conductor ampacity", inputs=i, classification="recommended_pending_verification")
+    if not any(usable(tables, tid) for tid in TABLE_IDS):
+        reason = "The ABYC E-11 tables are not installed or not yet confirmed, so nothing was computed. Open Calculators → ABYC E-11 reference, import each table from your copy of the standard, check it against the page and press Confirm."
+        return CalcResult(**common, steps=[], results=[ResultValue("size_awg", "Conductor size", None, "AWG", note=reason, group="Conductor")], asks=[{"field": "reference", "input_key": None, "unit": None, "prompt": reason}], warnings=[reason])
+
+    r = size_circuit(inputs, tables, own, sheet)
+    c, p = r["conductor"], r["protection"]
+
+    def cite(src: dict | None) -> str:
+        if not src:
+            return ""
+        return "entered by you" if "by" in src else f"ABYC E-11, {src.get('title') or src.get('table')}, page {src['page']}"
+
+    results: list[ResultValue] = []
+    size_text = f"{c['parallel']} × {c['size_awg']} AWG in parallel" if c["size_awg"] and c["parallel"] > 1 else (f"{c['size_awg']} AWG" if c["size_awg"] else None)
+    governed = {"voltage_drop": "the voltage-drop limit", "ampacity": "the current it must carry", "printed_table": "the printed table"}.get(c["governed_by"] or "", "")
+    size_note = f"Governed by {governed}." if size_text else next((b["reason"] for b in r["blanks"] if b["field"].startswith("conductor.")), "No conductor size was settled.")
+    results.append(ResultValue("size_awg", "Conductor size", size_text, None, classification="documented_value" if size_text else "recommended_pending_verification", note=size_note, group="Conductor"))
+    if c["size_mm2"] is not None:
+        results.append(ResultValue("size_mm2", "Same area in mm²", c["size_mm2"], "mm²", classification="calculated_estimate", note=f"Unit conversion (1 circular mil = 0.0005067 mm²); nearest standard metric size {fmt(c['metric_standard_mm2'])} mm²" if c["metric_standard_mm2"] else "Unit conversion (1 circular mil = 0.0005067 mm²)", group="Conductor"))
+    vd = c["voltage_drop"]
+    results.append(ResultValue("cm_required", "Circular mils needed for the drop limit", vd["cm_required"], "CM", classification="documented_value", note=vd.get("reason") or cite(vd.get("source")), group="Conductor"))
+    results.append(ResultValue("voltage_drop_size", "Size for the voltage drop", f"{vd['size_awg']} AWG" if vd["size_awg"] else None, None, classification="documented_value", note=vd.get("reason") or cite(vd.get("source")), group="Conductor"))
+    pt = c["printed_table"]
+    results.append(ResultValue("printed_table_size", "Size from the printed table", f"{pt['size_awg']} AWG" if pt["size_awg"] else None, None, classification="documented_value", note=pt.get("reason") or cite(pt.get("source")), group="Conductor"))
+    am = c["ampacity"]
+    amp_note = am.get("reason") or f"{fmt(am['ampacity_a'])} A × bundling factor {fmt(am['bundling_factor'])} ({cite(am.get('source'))})"
+    results.append(ResultValue("ampacity_size", "Size for the current, derated", f"{am['size_awg']} AWG" if am["size_awg"] else None, None, classification="documented_value", note=amp_note, group="Conductor"))
+    d = c["drop_at_size"]
+    results.append(ResultValue("drop_at_size", "Drop at that size", d["volts"], "V", classification="calculated_estimate", note=d.get("reason") or (f"{fmt(d['percent'])} % of {fmt(inputs['system_voltage'])} V" if d["percent"] is not None else None), group="Conductor"))
+
+    fuse_note = p.get("reason") or (f"At least {fmt(p['min_a'])} A for the load, within the conductor's {fmt(p['conductor_ampacity_a'])} A" if p["fuse_a"] is not None else None)
+    results.append(ResultValue("fuse_a", "Fuse or breaker", p["fuse_a"], "A", classification="recommended_pending_verification", note=fuse_note, group="Protection"))
+    if p["characteristic"]:
+        results.append(ResultValue("fuse_characteristic", "Characteristic", p["characteristic"], None, classification="recommended_pending_verification", note=p["guidance"], group="Protection"))
+    ic = p["interrupting"]
+    classes = ", ".join(f"{x['class']} ({fmt(x['interrupting_rating_a'])} A{', suits this load' if x['suits_load'] else ''})" for x in ic["classes"]) or None
+    results.append(ResultValue("interrupting", "Fuse classes with enough interrupting capacity", classes, None, classification="recommended_pending_verification", note=ic.get("reason") or (f"The source can deliver {fmt(ic['required_a'])} A; ratings from the makers' datasheets" if classes else None), group="Protection"))
+
+    asks = []
+    for b in r["blanks"]:
+        ask = b.get("ask")
+        asks.append({"field": b["field"], "reason": b["reason"], "input_key": ANSWER_INPUTS.get(ask["field"]) if ask else None, "unit": ask["unit"] if ask else None, "prompt": ask["prompt"] if ask else b["reason"]})
+    warnings = [b["reason"] for b in r["blanks"] if not b.get("ask")]
+    if p["fits_conductor"] is False:
+        warnings.append(p["reason"])
+    sources: list[SourceRef] = []
+    seen = set()
+    for src in (vd.get("source"), pt.get("source"), am.get("source")):
+        if src and "page" in src and (src["table"], src["page"]) not in seen:
+            seen.add((src["table"], src["page"]))
+            sources.append(SourceRef(document_name=f"ABYC E-11 ({src.get('title') or src['table']})", page=src["page"]))
+    return CalcResult(
+        **common, steps=r["steps"], results=results, asks=asks, reminders=r["reminders"], warnings=warnings, sources=sources,
+        assumptions=[
+            "A conductor must satisfy two requirements and the larger size wins: carry the current without overheating (the ampacity table, derated for engine space and bundling) and deliver the voltage (the drop limit). When no single listed size does both, conductors are paralleled.",
+            "The fuse protects the conductor: never above its derated ampacity, at least the load times its load-type factor, rounded up to a standard size.",
+            "Every table value comes from your confirmed copy of ABYC E-11 and cites its page; mm² and the standard size lists are conversions and industry lists; load behaviour is industry guidance.",
+        ] + (["These figures come from the synthetic test tables, not from the standard."] if r["fixture"] else []),
+    )
+
+
+CIRCUIT_E11 = Calculator(
+    CalculatorSpec(
+        id="circuit_e11", name="Circuit: conductor and protection (ABYC E-11)", category="Conductors",
+        description="From current, length and any nominal voltage to the conductor size (voltage drop first, then the current it must carry with engine-space and bundling derating, conductors in parallel when one is not enough) and the fuse for that conductor - from your confirmed copy of ABYC E-11, every number with its page. What the tables do not cover comes back as a blank you can fill in.",
+        formula="CM = K × I × L / E; ampacity × bundling factor; larger wins; fuse ≥ load × k, ≤ conductor",
+        inputs=[
+            InputSpec("system_voltage", "System voltage", "V", entity_types=["voltage"], qualifiers=["nominal"], help="any nominal voltage: 12, 24, 32, 36, 48…"),
+            InputSpec("current", "Circuit current", "A", entity_types=["current", "fuse", "breaker"], qualifiers=["continuous", "maximum"]),
+            InputSpec("length", "One-way length", None, help="Distance from the source to the load"),
+            InputSpec("length_unit", "Length unit", None, kind="select", default="m", options=[{"value": "m", "label": "metres"}, {"value": "ft", "label": "feet"}]),
+            InputSpec("max_drop_percent", "Voltage-drop limit", None, kind="select", default="3", options=[{"value": "3", "label": "3 % (critical circuits)"}, {"value": "10", "label": "10 % (non-critical)"}, {"value": "other", "label": "other"}]),
+            InputSpec("max_drop_other", "Other limit", "%", required=False, help="only when the limit is 'other'"),
+            InputSpec("insulation_rating_c", "Insulation rating", "°C", default=105, help="as printed on the cable"),
+            InputSpec("engine_space", "Runs through an engine space", None, kind="select", default="no", options=[{"value": "no", "label": "No"}, {"value": "yes", "label": "Yes"}]),
+            InputSpec("bundled", "Bundled with other conductors", None, kind="select", default="no", options=[{"value": "no", "label": "No"}, {"value": "yes", "label": "Yes"}]),
+            InputSpec("bundled_conductors", "Current-carrying conductors in the bundle", None, required=False, help="this circuit's two included"),
+            InputSpec("load_type", "Load", None, kind="select", default="resistive", options=[{"value": k, "label": v["label"]} for k, v in DEVICE_PROFILES.items()]),
+            InputSpec("short_circuit_a", "Source short-circuit current (optional)", "A", required=False, entity_types=["current"], qualifiers=["short circuit", "short-circuit", "fault"], help="from the battery datasheet"),
+            InputSpec("manufacturer_fuse", "Maker's stated fuse (optional)", "A", required=False, entity_types=["fuse", "breaker"], qualifiers=["recommended", "required"]),
+            InputSpec("own_ampacity_a", "Allowable current from the page", "A", required=False, answers="conductor.ampacity.size_awg"),
+            InputSpec("own_bundling_factor", "Bundling factor from the page", None, required=False, answers="conductor.ampacity.size_awg"),
+            InputSpec("own_k", "K from the page", None, required=False, answers="conductor.voltage_drop.cm_required"),
+            InputSpec("own_short_circuit_a", "Source short-circuit current from the datasheet", "A", required=False, answers="protection.interrupting.required_a"),
+        ],
+        outputs=[{"key": "size_awg", "label": "Conductor size"}, {"key": "fuse_a", "label": "Fuse or breaker", "unit": "A"}],
+        notes=["Every table value cites its page in your confirmed copy of ABYC E-11. What the tables do not cover comes back blank, with a box for the value from the page; what you type is marked as yours."],
+        excel=[],
+    ),
+    _circuit_e11,
+)
+
+
 REGISTRY: dict[str, Calculator] = {
     c.spec.id: c
-    for c in (DC_CURRENT, INVERTER_DC_CURRENT, VOLTAGE_DROP, BATTERY_RUNTIME, ALTERNATOR_CHARGING, AC_LOAD, FUSE_PROTECTION)
+    for c in (CIRCUIT_E11, DC_CURRENT, INVERTER_DC_CURRENT, VOLTAGE_DROP, BATTERY_RUNTIME, ALTERNATOR_CHARGING, AC_LOAD, FUSE_PROTECTION)
 }
 
 

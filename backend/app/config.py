@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     # Watch <data_dir>/inbox for dropped files (False in tests, which call scan_once())
     inbox_watcher: bool = True
 
+    # The owner's ABYC E-11 reference tables. The bundled copy (the library
+    # in packages/e11-calc, or reference/e11 inside the installed app) is
+    # read-only; what the person imports, corrects and confirms in the app is
+    # saved under <data_dir>/reference/e11 and wins over it. The synthetic
+    # test fixture is refused unless a test says otherwise.
+    reference_dir: Path = REPO_DIR / "packages" / "e11-calc"
+    reference_allow_fixture: bool = False
+
     # Serving
     frontend_dist: Path = REPO_DIR / "frontend" / "dist"
     max_upload_mb: int = 200
@@ -94,6 +102,10 @@ class Settings(BaseSettings):
     @property
     def exports_dir(self) -> Path:
         return self.data_dir / "exports"
+
+    @property
+    def user_reference_dir(self) -> Path:
+        return self.data_dir / "reference" / "e11"
 
     def ensure_dirs(self) -> None:
         for d in (self.data_dir, self.originals_dir, self.pages_dir):

@@ -135,6 +135,12 @@ def frontend_dist() -> Path:
     return (BUNDLE_DIR if FROZEN else REPO_DIR) / "frontend" / "dist"
 
 
+def reference_dir() -> Path:
+    """The bundled ABYC E-11 reference: the library folder in a checkout, or
+    what the spec copied to reference/e11 inside the installed app."""
+    return (BUNDLE_DIR / "reference" / "e11") if FROZEN else REPO_DIR / "packages" / "e11-calc"
+
+
 def icon_path() -> Path | None:
     root = BUNDLE_DIR / "desktop" / "icons" if FROZEN else REPO_DIR / "desktop" / "icons"
     for name in ("icon.png", "icon.ico"):
@@ -421,6 +427,7 @@ def run() -> int:
     load_user_env(data_dir)
     os.environ["MDI_DATA_DIR"] = str(data_dir)
     os.environ.setdefault("MDI_FRONTEND_DIST", str(frontend_dist()))
+    os.environ.setdefault("MDI_REFERENCE_DIR", str(reference_dir()))
     os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
     tess = find_tesseract()

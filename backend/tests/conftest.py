@@ -13,6 +13,11 @@ def data_dir(tmp_path_factory) -> Path:
     os.environ["MDI_AI_ENABLED"] = "false"
     os.environ["MDI_BACKGROUND_PROCESSING"] = "false"
     os.environ["MDI_INBOX_WATCHER"] = "false"
+    # The E-11 reference: the library's synthetic fixture, with made-up
+    # numbers, which the loader refuses unless told it is a test.
+    repo = Path(__file__).resolve().parent.parent.parent
+    os.environ["MDI_REFERENCE_DIR"] = str(repo / "packages" / "e11-calc" / "tests" / "fixtures")
+    os.environ["MDI_REFERENCE_ALLOW_FIXTURE"] = "true"
     from app.config import get_settings
     from app.db import reset_engine
 

@@ -36,6 +36,10 @@ class InputSpec:
     help: str | None = None
     entity_types: list[str] = field(default_factory=list)  # document entity types that can populate this input
     qualifiers: list[str] = field(default_factory=list)  # preferred entity qualifiers
+    # An "answer" input: the value a person types when a result comes back
+    # blank because the reference tables do not cover the case. Names the
+    # blank it fills (the `field` of the ask); shown only when that ask is open.
+    answers: str | None = None
 
 
 @dataclass
@@ -75,6 +79,8 @@ class ResultValue:
     unit: str | None = None
     classification: str = "calculated_estimate"  # manufacturer_required | calculated_estimate | recommended_pending_verification | documented_value
     note: str | None = None
+    # Results that belong together on screen ("Conductor", "Protection"); None = the calculator's only group.
+    group: str | None = None
 
 
 @dataclass
@@ -88,6 +94,11 @@ class CalcResult:
     assumptions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     sources: list[SourceRef] = field(default_factory=list)
+    # A blank result is a request to the person: which result is blank, why,
+    # and the input that answers it. Empty for calculators without blanks.
+    asks: list[dict] = field(default_factory=list)
+    # Reminders from the standard that apply to this case, each with its clause and page.
+    reminders: list[dict] = field(default_factory=list)
     classification: str = "calculated_estimate"
     disclaimer: str = (
         "This is an engineering estimate computed from the inputs shown. It is not a manufacturer "
@@ -109,7 +120,9 @@ class Calculator:
     def run(self, raw_inputs: dict[str, Any]) -> CalcResult:
         inputs = coerce_inputs(self.spec, raw_inputs)
         result = self._fn(inputs)
-        result.sources = [iv.source for iv in inputs.values() if iv.source]
+        # Input sources first, then whatever the calculator cited itself (a
+        # reference table's page); this used to overwrite the latter.
+        result.sources = [iv.source for iv in inputs.values() if iv.source] + list(result.sources)
         return result
 
 

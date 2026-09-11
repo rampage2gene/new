@@ -50,6 +50,15 @@ def test_server_starts_without_console_streams(launcher, data_dir, monkeypatch, 
         server.stop()
 
 
+def test_reference_dir_is_the_library_in_a_checkout_and_the_bundle_when_frozen(launcher, monkeypatch, tmp_path):
+    """The E-11 tables ship inside the app under reference/e11 (the spec's
+    datas); in a checkout they are the library folder itself."""
+    assert launcher.reference_dir() == launcher.REPO_DIR / "packages" / "e11-calc"
+    monkeypatch.setattr(launcher, "FROZEN", True)
+    monkeypatch.setattr(launcher, "BUNDLE_DIR", tmp_path)
+    assert launcher.reference_dir() == tmp_path / "reference" / "e11"
+
+
 def test_portable_data_dir_uses_folder_beside_the_exe(launcher, monkeypatch, tmp_path):
     """A portable copy keeps documents and its log next to the executable."""
     exe = tmp_path / "MarineDocIntelligence"

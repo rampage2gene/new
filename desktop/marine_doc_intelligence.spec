@@ -16,6 +16,11 @@ ICON = {
 datas = [
     (str(ROOT / "frontend/dist"), "frontend/dist"),
     (str(ROOT / "desktop/icons"), "desktop/icons"),
+    # The owner's ABYC E-11 reference tables and reminders, read-only inside
+    # the app; what they confirm in the app is saved to the data folder.
+    (str(ROOT / "packages/e11-calc/tables"), "reference/e11/tables"),
+    (str(ROOT / "packages/e11-calc/cheatsheet"), "reference/e11/cheatsheet"),
+    (str(ROOT / "packages/e11-calc/profiles"), "reference/e11/profiles"),
 ]
 binaries, hiddenimports = [], []
 for pkg in ("pymupdf", "pytesseract", "anthropic", "openpyxl", "webview", "qrcode"):
