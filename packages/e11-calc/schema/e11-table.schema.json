@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "e11-table.schema.json",
+  "title": "One printed table from the owner's copy of ABYC E-11",
+  "description": "Documentation-grade: the loaders in src/loader.ts and backend/app/reference/e11_tables.py validate by hand with the same rules. Every table carries the page it was copied from; every row its own page; a cell may be null when the page prints nothing there. status: draft (copied, not yet checked against the page: unusable), confirmed (checked by a person), fixture (synthetic test data, refused outside a test).",
+  "type": "object",
+  "required": ["id", "kind", "title", "status", "source"],
+  "properties": {
+    "id": { "enum": ["constants", "circular_mils", "ampacity_outside_engine_space", "ampacity_inside_engine_space", "bundling_factors", "voltage_drop_3pct", "voltage_drop_10pct", "fuse_classes"] },
+    "kind": { "enum": ["constants", "circular_mils", "ampacity", "bundling", "voltage_drop_grid", "fuse_classes"] },
+    "title": { "type": "string", "description": "The table's title as printed." },
+    "status": { "enum": ["draft", "confirmed", "fixture"] },
+    "source": {
+      "type": "object",
+      "required": ["document"],
+      "properties": {
+        "document": { "type": "string" },
+        "edition": { "type": "string" },
+        "table": { "type": "string", "description": "The table's number as printed, e.g. 'Table VI-A'." },
+        "page": { "type": "integer", "minimum": 1, "description": "Required for every kind except fuse_classes, whose rows each cite a datasheet." },
+        "document_id": { "type": "string", "description": "The document's id inside the desktop app, when it was imported there." }
+      }
+    },
+    "edits": { "type": "object", "additionalProperties": { "const": "you" }, "description": "Cells a person typed rather than copied, keyed 'row/column'. The engine ignores this; the editor shows it." }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": { "const": "constants" },
+        "values": { "type": "object", "required": ["K_copper"], "properties": { "K_copper": { "type": "object", "required": ["value", "page"], "properties": { "value": { "type": "number" }, "page": { "type": "integer", "minimum": 1 } } } } },
+        "formula_as_printed": { "type": "string" },
+        "length_definition": { "enum": ["round_trip", "one_way"], "description": "Whether the printed formula's L is the conductor's round trip or one way, as the page words it." }
+      },
+      "required": ["values", "length_definition"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "circular_mils" },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["size_awg", "circular_mils", "page"], "properties": { "size_awg": { "type": "string" }, "circular_mils": { "type": "number" }, "mm2": { "type": ["number", "null"] }, "page": { "type": "integer", "minimum": 1 } } } }
+      },
+      "required": ["rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "ampacity" },
+        "columns": { "type": "object", "description": "Insulation temperature rating in °C -> unit, e.g. {\"105\": \"A\"}.", "additionalProperties": { "type": "string" } },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["size_awg", "values", "page"], "properties": { "size_awg": { "type": "string" }, "values": { "type": "object", "additionalProperties": { "type": ["number", "null"] } }, "page": { "type": "integer", "minimum": 1 } } } }
+      },
+      "required": ["columns", "rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "bundling" },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["min_conductors", "max_conductors", "factor", "page"], "properties": { "min_conductors": { "type": "integer" }, "max_conductors": { "type": ["integer", "null"], "description": "null means 'and above'." }, "factor": { "type": "number" }, "page": { "type": "integer", "minimum": 1 } } } }
+      },
+      "required": ["rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "voltage_drop_grid" },
+        "nominal_voltage": { "type": "number" },
+        "drop_percent": { "type": "number" },
+        "length_unit": { "enum": ["ft", "m"] },
+        "length_definition": { "enum": ["round_trip", "one_way"], "description": "As the column heading words it." },
+        "lengths": { "type": "array", "items": { "type": "number" } },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["current", "sizes", "page"], "properties": { "current": { "type": "number" }, "sizes": { "type": "object", "additionalProperties": { "type": ["string", "null"] }, "description": "Length (as a string key) -> AWG size, or null where the page prints nothing." }, "page": { "type": "integer", "minimum": 1 } } } }
+      },
+      "required": ["nominal_voltage", "drop_percent", "length_unit", "length_definition", "lengths", "rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "fuse_classes" },
+        "rows": { "type": "array", "items": { "type": "object", "required": ["class", "interrupting_rating_a", "suits", "source"], "properties": { "class": { "type": "string" }, "interrupting_rating_a": { "type": "number" }, "voltage_rating_v": { "type": ["number", "null"] }, "suits": { "type": "array", "items": { "type": "string" }, "description": "Load types (keys of device_profiles) this class suits." }, "source": { "type": "object", "required": ["document", "page"], "properties": { "document": { "type": "string" }, "page": { "type": "integer", "minimum": 1 } } } } } }
+      },
+      "required": ["rows"]
+    }
+  ]
+}

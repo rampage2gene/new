@@ -1,0 +1,11 @@
+{
+  "id": "fuse_classes",
+  "title": "SYNTHETIC FIXTURE - fuse classes",
+  "kind": "fuse_classes",
+  "status": "fixture",
+  "source": { "document": "SYNTHETIC TEST FIXTURE - not a datasheet" },
+  "rows": [
+    { "class": "Class X", "interrupting_rating_a": 20000, "voltage_rating_v": 125, "suits": ["inverter", "battery_main"], "source": { "document": "FIXTURE fuse datasheet", "page": 1 } },
+    { "class": "Class Y", "interrupting_rating_a": 2000, "voltage_rating_v": 32, "suits": ["resistive", "electronics"], "source": { "document": "FIXTURE fuse datasheet", "page": 2 } }
+  ]
+}

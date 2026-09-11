@@ -1,0 +1,17 @@
+{
+  "id": "voltage_drop_3pct",
+  "title": "SYNTHETIC FIXTURE - 3 % drop at 12 V",
+  "kind": "voltage_drop_grid",
+  "status": "fixture",
+  "source": { "document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "page": 4 },
+  "nominal_voltage": 12,
+  "drop_percent": 3,
+  "length_unit": "ft",
+  "length_definition": "round_trip",
+  "lengths": [10, 20, 40],
+  "rows": [
+    { "current": 5, "page": 4, "sizes": { "10": "16", "20": "12", "40": null } },
+    { "current": 10, "page": 4, "sizes": { "10": "14", "20": "12", "40": null } },
+    { "current": 20, "page": 4, "sizes": { "10": "14", "20": "12", "40": null } }
+  ]
+}

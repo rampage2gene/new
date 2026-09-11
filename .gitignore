@@ -35,3 +35,6 @@ frontend/.ui-shots/
 
 # downloaded by CI for the Windows installer
 desktop/windows/MicrosoftEdgeWebview2Setup.exe
+
+# e11-calc library
+packages/e11-calc/node_modules/

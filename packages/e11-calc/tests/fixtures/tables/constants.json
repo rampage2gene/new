@@ -1,0 +1,10 @@
+{
+  "id": "constants",
+  "title": "SYNTHETIC FIXTURE - formula constants",
+  "kind": "constants",
+  "status": "fixture",
+  "source": { "document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "page": 1 },
+  "values": { "K_copper": { "value": 10, "page": 1 } },
+  "formula_as_printed": "CM = K x I x L / E (fixture)",
+  "length_definition": "round_trip"
+}

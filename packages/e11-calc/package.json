@@ -1,0 +1,26 @@
+{
+  "name": "e11-calc",
+  "version": "0.1.0",
+  "description": "Conductor sizing and overcurrent protection for small-craft DC circuits from ABYC E-11 tables you supply. Dependency-free ESM; every value cites its page; nothing is guessed.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./node": { "types": "./dist/node.d.ts", "default": "./dist/node.js" },
+    "./tables/*": "./tables/*",
+    "./cheatsheet/*": "./cheatsheet/*"
+  },
+  "files": ["dist", "tables", "cheatsheet", "schema", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"tests/*.test.mjs\"",
+    "cheatsheet": "npm run build && node scripts/render-cheatsheet.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}
