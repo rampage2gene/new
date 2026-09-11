@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import type { Entity } from "../types";
+import { ask, readingsOf } from "../verification";
 import SendToCalculator from "./SendToCalculator";
 
 export function FlagDots({ entity }: { entity: Entity }) {
@@ -9,21 +10,26 @@ export function FlagDots({ entity }: { entity: Entity }) {
   return <span className={`flag-dot ${worst}`} title={entity.flags.map((f) => f.message).join("\n")} />;
 }
 
-/** What the verification ladder concluded, in two words. */
+/** What the verification ladder concluded, in two words; the tooltip says
+ *  what happened and what to do, in the words `verification.ask` uses on
+ *  every screen. */
 export function verificationTag(e: Entity): { label: string; cls: string; title: string } | null {
   const v = e.verification;
+  const a = ask(e);
   const readings = v?.readings ? Object.entries(v.readings).filter(([, r]) => r).map(([k, r]) => `${k}: ${r}`).join("\n") : "";
   if (e.verified) return { label: "you", cls: "ok", title: `Confirmed by you${v?.original && v.original !== e.value_text ? ` (was ${v.original})` : ""}` };
   switch (v?.status) {
-    case "confirmed": return { label: v.note === "2 readers" ? "2 readers" : "3 reads", cls: "ok", title: `Read the same way by independent readers\n${readings}` };
-    case "ai_confirmed": return { label: "AI", cls: "ok", title: `Confirmed by the AI reading the page\n${readings}` };
+    case "confirmed": return { label: v.note === "2 readers" ? "2 readers" : "3 reads", cls: "ok", title: `${a.what}\n${readings}` };
+    case "ai_confirmed": return { label: "AI", cls: "ok", title: `${a.what}\n${readings}` };
     case "corrected":
-    case "ai_corrected": return { label: "corrected", cls: "warn", title: `Was ${v.original}; two other readings agreed on ${e.value_text}\n${readings}` };
-    case "to_fill": return { label: "to fill in", cls: "crit", title: `Readings differ; left blank\n${readings}` };
+    case "ai_corrected": return { label: "corrected", cls: "warn", title: `${a.what}\n${readings}` };
+    // Waiting for the person is the normal day's work, so it wears --warn;
+    // --crit is kept for what is actually wrong (docs/UI.md §6).
+    case "to_fill": return { label: "to fill in", cls: "warn", title: `${a.what} ${a.todo}` };
     // A value only one reader could see is the least certain thing on the
     // screen; it may not wear the neutral tag (docs/UI.md §6).
     case "unverified":
-    case "single": return { label: "1 reader", cls: "warn", title: "Only one reading of this spot could be made; confirm it on the page" };
+    case "single": return { label: "1 reader", cls: "warn", title: `${a.what} ${a.todo}` };
     case "embedded": return null;
     default: return null;
   }
@@ -32,7 +38,8 @@ export function verificationTag(e: Entity): { label: string; cls: string; title:
 export function ConfidenceCell({ entity }: { entity: Entity }) {
   const status = entity.verification?.status;
   if (status === "to_fill" && !entity.verified) {
-    return <span className="badge crit" title="Left blank: the readings disagree. Fill it in from the page.">—</span>;
+    const a = ask(entity);
+    return <span className="badge warn" title={`${a.what} ${a.todo}`}>—</span>;
   }
   const c = entity.confidence;
   const cls = c >= 0.95 ? "ok" : c >= 0.75 ? "warn" : "crit";
@@ -48,16 +55,55 @@ export function ConfidenceCell({ entity }: { entity: Entity }) {
   );
 }
 
-/** The value as printed, or the blank and what the readers saw. */
-export function ValueCell({ entity }: { entity: Entity }) {
+/** The value as printed, or the blank, what the readers saw, and - where the
+ *  row can be edited - a box to type the value in.
+ *
+ *  A blank used to say "to fill in" and leave the typing to another tab,
+ *  reachable through a tooltip. The ask is answered where it is seen: the
+ *  box sits in the blank, saves on Enter, and the value becomes yours. */
+export function ValueCell({ entity, onChange }: { entity: Entity; onChange?: (e: Entity) => void }) {
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const v = entity.verification;
   if (v?.status === "to_fill" && !entity.verified) {
-    const seen = v.readings ? Object.values(v.readings).filter(Boolean) : [];
+    const seen = readingsOf(entity);
+    const save = async () => {
+      if (!draft.trim()) return;
+      setBusy(true);
+      setError(null);
+      try {
+        onChange?.(await api.fillIn(entity.id, draft.trim()));
+      } catch (e: any) {
+        setError(e?.message ?? String(e));
+      } finally {
+        setBusy(false);
+      }
+    };
     return (
       <span>
         <FlagDots entity={entity} />
-        <b className="muted">— to fill in</b>
-        {seen.length > 0 && <span className="small muted"> read as {Array.from(new Set(seen)).join(" / ")}</span>}
+        <b className="muted">— blank</b>
+        {seen.length > 0 && <span className="small muted"> read as {seen.join(" / ")}</span>}
+        {onChange && (
+          // Clicking into the box bubbles to the row, which brings the page
+          // up - wanted. Only Save stops there, so saving is not also a jump.
+          <div className="row" style={{ flexWrap: "nowrap", marginTop: 4 }}>
+            <input
+              type="text"
+              value={draft}
+              placeholder={`type what page ${entity.page} says`}
+              aria-label={`Value from page ${entity.page}`}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+              disabled={busy}
+              style={{ width: 150 }}
+            />
+            <button className="btn sm primary" disabled={busy || !draft.trim()} onClick={(e) => { e.stopPropagation(); save(); }}>Save</button>
+          </div>
+        )}
+        {onChange && <div className="small muted">{ask(entity).todo}</div>}
+        {error && <div className="small"><span className="tag crit">{error}</span></div>}
       </span>
     );
   }
@@ -70,9 +116,13 @@ export function ValueCell({ entity }: { entity: Entity }) {
   );
 }
 
+/** The tick that makes a value yours. On a one-reader row it is labelled
+ *  "Confirm", because that is the ask; elsewhere "verified". A blank row
+ *  cannot be ticked - there is nothing to confirm until a value is typed. */
 export function VerifiedBox({ entity, onChange }: { entity: Entity; onChange?: (e: Entity) => void }) {
   const [busy, setBusy] = useState(false);
-  const blank = entity.verification?.status === "to_fill" && !entity.verified;
+  const a = ask(entity);
+  const blank = a.kind === "blank";
   const toggle = async () => {
     setBusy(true);
     try {
@@ -84,9 +134,16 @@ export function VerifiedBox({ entity, onChange }: { entity: Entity; onChange?: (
       setBusy(false);
     }
   };
+  const title = blank
+    ? "Type the value first; then it is yours."
+    : entity.verified
+      ? "Untick to go back to what the machine read"
+      : a.kind === "confirm"
+        ? a.todo
+        : "Tick when you have checked this value on the page";
   return (
-    <label className="small" title={blank ? "Fill in the value first (To fill in tab)" : entity.verified ? "Untick to go back to the machine reading" : "Tick when you have checked this value on the page"} style={{ whiteSpace: "nowrap" }}>
-      <input type="checkbox" checked={entity.verified} disabled={busy || blank} onChange={toggle} /> verified
+    <label className="small" title={title} style={{ whiteSpace: "nowrap" }}>
+      <input type="checkbox" checked={entity.verified} disabled={busy || blank} onChange={toggle} /> {entity.verified ? "checked by you" : a.kind === "confirm" ? "Confirm" : "checked"}
     </label>
   );
 }
@@ -95,7 +152,7 @@ export default function EntityRow({ entity, onJump, showType, showDoc, onChange 
   return (
     <tr className="clickable" onClick={() => onJump(entity)}>
       {showType && <td>{entity.entity_type.replace(/_/g, " ")}</td>}
-      <td><ValueCell entity={entity} /></td>
+      <td><ValueCell entity={entity} onChange={onChange} /></td>
       <td>{entity.qualifier || "—"}</td>
       <td>{entity.application || (entity.equipment ? `${entity.equipment}${entity.equipment_model ? " " + entity.equipment_model : ""}` : "—")}</td>
       <td className="small">{showDoc && entity.document_name ? <><span className="muted">{entity.document_name}</span><br /></> : null}p.{entity.page}{entity.section ? <span className="muted"> · {entity.section}</span> : null}</td>

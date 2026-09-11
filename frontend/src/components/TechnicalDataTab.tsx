@@ -33,8 +33,8 @@ export default function TechnicalDataTab({ doc, jump }: { doc: DocumentDetail; j
         <a className="btn sm" href={api.exportWorkbookUrl([doc.id])} title="Excel workbook: values with page links, tables, and calculator sheets with live formulas">Workbook</a>
       </div>
       <p className="small muted">
-        Every value keeps its page, section and location. On scanned pages each value is read by two independent OCR engines; where they disagree a third read of that line decides, and with no majority the value is left blank rather than guessed (see the <b>To fill in</b> tab).
-        <b> ✓ 100%</b> means two readers agreed or you confirmed it; 95% a majority of three or the PDF's own text; lower is a single reading. Dots mark verification flags.
+        <b>✓ 100%</b> means two readers agreed, or you confirmed it; <b>95%</b> a majority of three readings, or the PDF's own text; <b>1 reader</b> means only one reader could see the spot, so confirm it or correct it.
+        A <b>blank</b> is a value we need from you: type it in the row, or in the <b>To fill in</b> tab. A dot marks a note in Verification.
       </p>
       {spec.groups.map((g) => {
         const items = g.key === "warnings" ? g.items : (g.items as Entity[]).filter(matches);

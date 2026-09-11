@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.1.9 - 2026-09-11
+
+The app left values blank and waited for you, but did not say what it was
+waiting for. Now every unsettled value says, in one line, what happened and
+what to do - and you can answer it where you see it.
+
+- Changed: the **To fill in** tab is two short lists whose headings are the
+  ask: *Type these from the page* (the two readers disagreed, nothing was
+  kept) and *Confirm these, or correct them* (only one reader could see the
+  spot). Each row says what the readers saw, and the line under the box you
+  are typing in says what to do. Columns are named for what they hold: what
+  it is, page, what the readers saw, what the page says.
+- Added: in **Technical data**, a blank value has its own box: type what the
+  page says, press Enter, and the value is yours. A one-reader value shows a
+  *Confirm* tick with the same one-line ask. No more tooltip pointing at
+  another tab.
+- Changed: **Verification** names each note in plain words ("two readings
+  disagree", "reader stopped on this page", "unusual wire size") and ends it
+  with a *What to do* line. "Mark reviewed" is now "I've checked this".
+- Changed: the wording in the three tabs no longer uses the app's internal
+  words; the UI check now refuses them in anything a person reads.
+- Nothing about how values are read or checked has changed: the machine
+  still never guesses, and only you can make a blank into a value.
+
 ## v0.1.8 - 2026-09-10
 
 A crash in the OCR reader used to take the whole app with it - window,

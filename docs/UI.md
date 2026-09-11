@@ -111,6 +111,22 @@ The whole product rests on this, so it is a UI rule, not a data rule:
 Nothing in the interface may present a machine reading with the same weight as
 a human confirmation, and no number may appear without a route to its page.
 
+**Every unsettled value says what happened and what to do**, in the same two
+sentences on every screen (`verification.ask` in `frontend/src/verification.ts`):
+
+| situation | what | to do |
+|---|---|---|
+| blank | "The two readers disagreed (A / B), so nothing was kept." | "Look at page N and type what it says." |
+| one reader | "Only one reader could see this spot; it read X." | "If page N shows X, press Confirm. If not, type the right value." |
+
+A tab, badge or tooltip may shorten these; it may not say it another way. A
+blank is answered where it is seen: the box to type the value sits in the
+blank itself (Technical data, To fill in), never behind a tooltip pointing at
+another tab. The Verification tab names each note in plain words
+(`flagLabel`) and ends it with a *What to do* line (`flagTodo`). This rule
+exists because a whole release went by with the user not knowing what the
+app was asking of them.
+
 Two rules follow, both learned the hard way:
 
 - **An input is never pre-filled with what the machine read.** A box already

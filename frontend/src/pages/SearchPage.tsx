@@ -69,7 +69,7 @@ export default function SearchPage() {
             <div key={h.chunk_id} className="hit" onClick={() => navigate(`/documents/${h.document_id}?page=${h.page_number}&bbox=${h.bbox.map((n) => Math.round(n)).join(",")}`)}>
               <div className="meta">
                 <b>{h.document_name}</b> · Page {h.page_number}{h.section ? ` · ${h.section}` : ""}
-                {h.sources.map((s) => <span key={s} className={`badge ${s === "entity" ? "ok" : s === "keyword" ? "accent" : s.endsWith("weak") || s.endsWith("partial") ? "" : "navy"}`}>{s.replace("_", " ")}</span>)}
+                {h.sources.map((s) => <span key={s} className={`badge ${s === "entity" ? "ok" : s === "keyword" ? "accent" : s.endsWith("weak") || s.endsWith("partial") ? "" : "navy"}`}>{s === "entity" ? "value" : s.replace("_", " ")}</span>)}
               </div>
               <div className="snippet"><Highlighted text={h.text.length > 600 ? h.text.slice(0, 600) + "…" : h.text} terms={h.highlights} /></div>
             </div>

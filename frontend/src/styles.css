@@ -204,7 +204,7 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .tag.ok { background: var(--ok-soft); color: var(--ok); }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .tag.crit { background: var(--crit-soft); color: var(--crit); }
-tr.fill-blank td { background: var(--crit-soft); }
+tr.fill-blank td { background: var(--warn-soft); }
 a.badge { text-decoration: none; cursor: pointer; }
 
 /* Use on your phone */

@@ -94,7 +94,7 @@ export default function DocumentPage() {
             <button className={tab === "assistant" ? "active" : ""} onClick={() => setTab("assistant")}>AI Assistant</button>
             <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>Technical Data<span className="badge count">{counts.data}</span></button>
             <button className={tab === "structure" ? "active" : ""} onClick={() => setTab("structure")}>Structure</button>
-            <button className={tab === "fill" ? "active" : ""} onClick={() => setTab("fill")} title="Values the readers did not settle: fill them in or confirm them from the page">To fill in{counts.fill ? <span className={`badge count ${doc.stats.to_fill ? "crit" : "warn"}`}>{counts.fill}</span> : null}</button>
+            <button className={tab === "fill" ? "active" : ""} onClick={() => setTab("fill")} title="Values the readers did not settle: fill them in or confirm them from the page">To fill in{counts.fill ? <span className="badge count warn">{counts.fill}</span> : null}</button>
             <button className={tab === "qc" ? "active" : ""} onClick={() => setTab("qc")}>Verification{counts.qc ? <span className={`badge count ${doc.stats.critical_flags ? "crit" : "warn"}`}>{counts.qc}</span> : null}</button>
             <button className={tab === "diagram" ? "active" : ""} onClick={() => setTab("diagram")}>Diagram{counts.diagram ? <span className="badge count accent">{counts.diagram}</span> : null}</button>
           </div>

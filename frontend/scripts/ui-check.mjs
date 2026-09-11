@@ -30,6 +30,13 @@ const COLOUR_EXEMPT = /^\s*(?:--|\.hl\b|\.hl[.:]|@|\/\*)/;
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(/;
 /** A control whose whole label is one symbol says nothing to a screen reader. */
 const ICON_ONLY = /<button\b([^>]*)>\s*([^\w\s<{]{1,2})\s*<\/button>/g;
+/** §9 - words from the codebase that mean nothing to the person reading the
+ *  screen (CLAUDE.md "Writing"). Checked in JSX text and in the attributes a
+ *  person reads (title, placeholder, aria-label), never in identifiers. */
+const JARGON = /\b(entity|entities|ingest(?:ed|ion|ing)?|qc flags?|pipeline|verification layer|plausibility)\b/i;
+const READABLE = /(?:>([^<>{}\n]+)<)|(?:\b(?:title|placeholder|aria-label)=(?:"([^"]*)"|\{`([^`]*)`\})|(?:`([^`]*)`))/g;
+/** `${…}` inside a template literal is code, not copy. */
+const INTERPOLATION = /\$\{[^}]*\}/g;
 
 const findings = [];
 const add = (level, file, line, rule, message) => findings.push({ level, file, line, rule, message });
@@ -100,6 +107,18 @@ function checkSource(path) {
     const at = text.slice(0, m.index).split("\n").length;
     if (!/aria-label|title=/.test(m[1])) {
       add("error", file, at, "a11y", `icon-only button "${m[2]}" has no aria-label or title`);
+    }
+  }
+
+  // §9 - the copy voice: no codebase words in what a person reads.
+  if (file.endsWith(".tsx")) {
+    for (const m of text.matchAll(READABLE)) {
+      const readable = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").replace(INTERPOLATION, " ");
+      const hit = readable.match(JARGON);
+      if (hit) {
+        const at = text.slice(0, m.index).split("\n").length;
+        add("error", file, at, "voice", `"${hit[0]}" is a codebase word - say value, add, check, note (CLAUDE.md "Writing")`);
+      }
     }
   }
 
