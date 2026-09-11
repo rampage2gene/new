@@ -29,14 +29,20 @@ TABLE_IDS = (
     "voltage_drop_3pct",
     "voltage_drop_10pct",
     "fuse_classes",
+    "cable_dimensions",
+    "heat_shrink",
+    "lugs",
 )
 STATUSES = ("draft", "confirmed", "fixture")
-KINDS = ("constants", "circular_mils", "ampacity", "bundling", "voltage_drop_grid", "fuse_classes")
+KINDS = ("constants", "circular_mils", "ampacity", "bundling", "voltage_drop_grid", "fuse_classes", "cable_dimensions", "heat_shrink", "lugs")
+#: Tables whose rows cite a datasheet or catalog rather than a page of the standard.
+CATALOG_KINDS = ("fuse_classes", "cable_dimensions", "heat_shrink", "lugs")
 KIND_OF = {
     "constants": "constants", "circular_mils": "circular_mils",
     "ampacity_outside_engine_space": "ampacity", "ampacity_inside_engine_space": "ampacity",
     "bundling_factors": "bundling", "voltage_drop_3pct": "voltage_drop_grid", "voltage_drop_10pct": "voltage_drop_grid",
     "fuse_classes": "fuse_classes",
+    "cable_dimensions": "cable_dimensions", "heat_shrink": "heat_shrink", "lugs": "lugs",
 }
 
 
@@ -77,7 +83,7 @@ def validate_table(file: str, raw: Any) -> dict:
     _need(file, t.get("status") in STATUSES, f"status must be one of {', '.join(STATUSES)}")
     source = t.get("source")
     _need(file, isinstance(source, dict) and isinstance(source.get("document"), str), "has no source.document")
-    if t["kind"] != "fuse_classes":
+    if t["kind"] not in CATALOG_KINDS:
         _need(file, _is_page(source.get("page")), "has no source.page - every table must say which page it was copied from")
     rows = t.get("rows")
     kind = t["kind"]
@@ -116,6 +122,22 @@ def validate_table(file: str, raw: Any) -> dict:
             _need(file, isinstance(r, dict) and isinstance(r.get("class"), str) and _is_num(r.get("interrupting_rating_a")) and isinstance(r.get("suits"), list), "every fuse_classes row needs class, interrupting_rating_a and suits")
             src = r.get("source")
             _need(file, isinstance(src, dict) and isinstance(src.get("document"), str) and _is_page(src.get("page")), f"fuse class {r['class']} needs source.document and source.page (the datasheet it was read from)")
+    elif kind == "cable_dimensions":
+        _need(file, t.get("diameter_unit") in ("mm", "in"), 'cable_dimensions needs diameter_unit "mm" or "in"')
+        _need(file, isinstance(rows, list) and rows, "needs rows")
+        for r in rows:
+            _need(file, isinstance(r, dict) and isinstance(r.get("size_awg"), str) and _is_num(r.get("outside_diameter")) and r["outside_diameter"] > 0 and (r.get("page") is None or _is_page(r.get("page"))), "every cable_dimensions row needs size_awg and an outside_diameter above zero")
+    elif kind == "heat_shrink":
+        _need(file, t.get("diameter_unit") in ("mm", "in"), 'heat_shrink needs diameter_unit "mm" or "in"')
+        _need(file, isinstance(rows, list) and rows, "needs rows")
+        for r in rows:
+            _need(file, isinstance(r, dict) and isinstance(r.get("size"), str) and _is_num(r.get("supplied_id")) and _is_num(r.get("recovered_id")) and (r.get("page") is None or _is_page(r.get("page"))), "every heat_shrink row needs size, supplied_id and recovered_id")
+            _need(file, 0 < r["recovered_id"] < r["supplied_id"], f"heat shrink {r['size']}: recovered_id must be above zero and below supplied_id (it shrinks)")
+    elif kind == "lugs":
+        _need(file, t.get("diameter_unit") in (None, "mm", "in"), 'lugs diameter_unit must be "mm" or "in" when given')
+        _need(file, isinstance(rows, list) and rows, "needs rows")
+        for r in rows:
+            _need(file, isinstance(r, dict) and isinstance(r.get("size_awg"), str) and isinstance(r.get("stud"), str) and isinstance(r.get("part"), str) and (r.get("barrel_od") is None or _is_num(r.get("barrel_od"))) and (r.get("crimp_die") is None or isinstance(r.get("crimp_die"), str)) and (r.get("page") is None or _is_page(r.get("page"))), "every lugs row needs size_awg, stud and part")
     else:
         raise TableError(file, f'unknown kind "{kind}"')
     return t

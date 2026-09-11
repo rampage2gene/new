@@ -8,7 +8,7 @@
  */
 
 /** Where a number came from: a table and its page, or the person. */
-export type Source = { table: string; title?: string; page: number } | { by: "you" };
+export type Source = { table: string; title?: string; page: number } | { table: string; title?: string; document: string; page?: number | null } | { by: "you" };
 
 export type TableStatus = "draft" | "confirmed" | "fixture";
 
@@ -70,7 +70,35 @@ export interface FuseClassesTable extends TableBase {
   rows: { class: string; interrupting_rating_a: number; voltage_rating_v?: number | null; suits: string[]; source: { document: string; page: number } }[];
 }
 
-export type E11Table = ConstantsTable | CircularMilsTable | AmpacityTable | BundlingTable | VoltageDropGrid | FuseClassesTable;
+/**
+ * The three catalog tables are not from E-11: the owner types them from the
+ * cable maker's, the tubing maker's and the lug maker's catalogs. A page is
+ * optional on them; the source document is not.
+ */
+export interface CableDimensionsTable extends TableBase {
+  kind: "cable_dimensions";
+  diameter_unit: "mm" | "in";
+  rows: { size_awg: string; outside_diameter: number; page?: number | null }[];
+}
+
+export interface HeatShrinkTable extends TableBase {
+  kind: "heat_shrink";
+  diameter_unit: "mm" | "in";
+  /** supplied_id: inside diameter as supplied; recovered_id: after full shrink. */
+  rows: { size: string; supplied_id: number; recovered_id: number; adhesive?: boolean; page?: number | null }[];
+}
+
+export interface LugsTable extends TableBase {
+  kind: "lugs";
+  /** Unit of barrel_od; mm when absent. */
+  diameter_unit?: "mm" | "in";
+  rows: { size_awg: string; stud: string; part: string; barrel_od?: number | null; crimp_die?: string | null; page?: number | null }[];
+}
+
+export type E11Table = ConstantsTable | CircularMilsTable | AmpacityTable | BundlingTable | VoltageDropGrid | FuseClassesTable | CableDimensionsTable | HeatShrinkTable | LugsTable;
+
+/** Tables whose rows cite a datasheet or catalog rather than a page of the standard. */
+export const CATALOG_KINDS = ["fuse_classes", "cable_dimensions", "heat_shrink", "lugs"] as const;
 
 /** The ids the engine looks for. A missing one is a blank, not an error. */
 export const TABLE_IDS = [
@@ -82,6 +110,9 @@ export const TABLE_IDS = [
   "voltage_drop_3pct",
   "voltage_drop_10pct",
   "fuse_classes",
+  "cable_dimensions",
+  "heat_shrink",
+  "lugs",
 ] as const;
 export type TableId = (typeof TABLE_IDS)[number];
 
@@ -97,6 +128,8 @@ export interface Ask {
   field: string;
   unit: string | null;
   prompt: string;
+  /** What the box takes; a number when absent. */
+  kind?: "number" | "text";
 }
 
 export interface Blank {
@@ -108,9 +141,11 @@ export interface Blank {
 export interface CircuitInputs {
   system_voltage: number;
   current: number;
-  /** One-way length from the source to the load. */
+  /** The length, one way (the default) or the whole loop, per length_basis. */
   length: number;
   length_unit: "m" | "ft";
+  /** "loop": length is the whole run, source to load and back; "one_way" when absent. */
+  length_basis?: "loop" | "one_way";
   max_drop_percent: number;
   insulation_rating_c: number;
   engine_space: boolean;
@@ -118,6 +153,10 @@ export interface CircuitInputs {
   bundled_conductors: number;
   /** A key of DEVICE_PROFILES. */
   load_type: string;
+  /** A key of CIRCUIT_TYPES; adds its reminder tags. */
+  circuit_type?: string | null;
+  /** The terminal stud the lugs land on, as the lug catalog names it (5/16, M8...). */
+  stud_size?: string | null;
   /** Prospective short-circuit current of the source, from its datasheet. */
   short_circuit_a?: number | null;
   /** The maker's own fuse rating for the device, if it states one. */
@@ -131,6 +170,13 @@ export interface OwnValues {
   bundling_factor?: number | null;
   k?: number | null;
   short_circuit_a?: number | null;
+  /** The cable's outside diameter, from its maker, in mm. */
+  cable_od_mm?: number | null;
+  heat_shrink_size?: string | null;
+  lug_part?: string | null;
+  crimp_die?: string | null;
+  /** The stud size, when it was not given as an input. */
+  stud?: string | null;
 }
 
 export interface SizePick {
@@ -161,10 +207,20 @@ export interface CircuitResult {
     reason?: string;
     interrupting: { required_a: number | null; classes: { class: string; interrupting_rating_a: number; suits_load: boolean; source: { document: string; page: number } }[]; reason?: string; ask?: Ask };
   };
+  fittings: FittingsResult;
   reminders: CheatSheetEntry[];
   blanks: { field: string; reason: string; ask?: Ask }[];
   steps: string[];
   fixture: boolean;
+}
+
+/** The fittings for the chosen conductor, each from the owner's catalog tables or the person. */
+export interface FittingsResult {
+  cable_od: { value: number | null; unit: "mm" | "in" | null; mm: number | null; reason?: string; source?: Source };
+  heat_shrink: { size: string | null; supplied_id: number | null; recovered_id: number | null; unit: "mm" | "in" | null; adhesive: boolean | null; reason?: string; source?: Source };
+  lug: { part: string | null; stud: string | null; crimp_die: string | null; reason?: string; die_reason?: string; source?: Source; die_source?: Source };
+  /** Counts for the set, arithmetic from the parallel count and the loop length. */
+  quantities: { cables: number; lugs: number; heat_shrink_pieces: number; cable_length: number; length_unit: "m" | "ft"; note: string } | null;
 }
 
 export interface CheatSheetEntry {

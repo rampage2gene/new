@@ -1,0 +1,32 @@
+{
+  "id": "cable_dimensions",
+  "title": "SYNTHETIC FIXTURE - cable outside diameters",
+  "kind": "cable_dimensions",
+  "status": "fixture",
+  "source": {
+    "document": "SYNTHETIC TEST FIXTURE - not a cable catalog"
+  },
+  "diameter_unit": "mm",
+  "rows": [
+    {
+      "size_awg": "18",
+      "outside_diameter": 2.0,
+      "page": 1
+    },
+    {
+      "size_awg": "16",
+      "outside_diameter": 2.5,
+      "page": 1
+    },
+    {
+      "size_awg": "14",
+      "outside_diameter": 3.0,
+      "page": 1
+    },
+    {
+      "size_awg": "12",
+      "outside_diameter": 4.0,
+      "page": 1
+    }
+  ]
+}

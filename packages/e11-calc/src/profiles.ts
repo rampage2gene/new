@@ -31,6 +31,32 @@ export const DEVICE_PROFILES: Record<string, DeviceProfile> = {
   electronics: { label: "Electronics / instruments", factor: 1.25, surge_note: "Follow the equipment manufacturer's fuse rating; small fuses protect the wire.", char: "fast-acting (blade/glass) per manufacturer" },
 };
 
+/**
+ * Kinds of circuit, each mapped to the load profile that protects it and to
+ * the tags that pick the owner's reminders for it. Industry guidance: which
+ * rules apply to which circuit is written on the owner's pages, not here.
+ */
+export interface CircuitType {
+  label: string;
+  load_type: string;
+  tags: string[];
+}
+
+export const CIRCUIT_TYPES: Record<string, CircuitType> = {
+  battery_main: { label: "Battery to main switch or panel feed", load_type: "battery_main", tags: ["battery_main"] },
+  inverter: { label: "Inverter or inverter-charger", load_type: "inverter", tags: ["inverter"] },
+  charger: { label: "Battery charger output", load_type: "battery_charger", tags: ["charger"] },
+  alternator: { label: "Alternator output", load_type: "alternator", tags: ["alternator"] },
+  dc_dc: { label: "DC-DC converter", load_type: "dc_dc", tags: ["dc_dc"] },
+  solar: { label: "Solar controller", load_type: "solar", tags: ["solar"] },
+  windlass: { label: "Windlass, thruster, winch", load_type: "motor", tags: ["windlass", "motor"] },
+  starter: { label: "Engine starter", load_type: "motor", tags: ["starter", "motor"] },
+  bilge_pump: { label: "Bilge pump", load_type: "motor", tags: ["bilge_pump", "motor"] },
+  lights: { label: "Navigation and other lights", load_type: "resistive", tags: ["lights"] },
+  electronics: { label: "Electronics, instruments", load_type: "electronics", tags: ["electronics"] },
+  general_dc: { label: "Other DC load", load_type: "resistive", tags: [] },
+};
+
 export function nextStandard(value: number, sizes: number[] = STANDARD_FUSE_SIZES_A): number | null {
   for (const s of sizes) if (s >= value - 1e-9) return s;
   return null;

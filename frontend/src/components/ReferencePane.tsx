@@ -117,9 +117,12 @@ function TableEditor({ id, onChanged, onClose, onDirty, onOpenPage }: { id: Refe
   // the page - an unread cell that slipped through would be a guess the
   // calculator then treats as the standard.
   const unread = missingCells(table);
+  // Where the values come from: a page of the standard, or the owner's catalog.
+  const catalog = isCatalog(table.kind);
+  const fromWhere = catalog ? "from the catalog" : "from the page";
   const save = async (status: "draft" | "confirmed") => {
     if (status === "confirmed" && unread.length) {
-      setError(`${unread.length} cell${unread.length === 1 ? " is" : "s are"} still empty or unchecked (${unread.slice(0, 4).join(", ")}${unread.length > 4 ? "…" : ""}). Type them from the page, or save as a draft for now.`);
+      setError(`${unread.length} cell${unread.length === 1 ? " is" : "s are"} still empty or unchecked (${unread.slice(0, 4).join(", ")}${unread.length > 4 ? "…" : ""}). Type them ${fromWhere}, or save as a draft for now.`);
       return;
     }
     setBusy(true); setError(null); setSaved(null);
@@ -171,9 +174,9 @@ function TableEditor({ id, onChanged, onClose, onDirty, onOpenPage }: { id: Refe
       </div>
       <p className="small muted" style={{ marginTop: 4 }}>
         {table.status === "confirmed" ? "Confirmed by you. " : table.status === "draft" ? "A draft: not used by the calculator until you confirm it. " : table.status === "fixture" ? "Synthetic test data, not the standard. " : "Not added yet. "}
-        Every value must come from the page; a highlighted cell is one the app could not read and needs you to type.
+        {isCatalog(table.kind) ? "Typed from a datasheet or catalog, named below; a highlighted cell still needs a value. " : "Every value must come from the page; a highlighted cell is one the app could not read and needs you to type."}
       </p>
-      {table.kind !== "fuse_classes" && (
+      {!isCatalog(table.kind) && (
         <div className="row" style={{ marginBottom: 8 }}>
           <label className="field" style={{ margin: 0, minWidth: 220 }}>
             <span className="lbl">Import from a document</span>
@@ -195,9 +198,10 @@ function TableEditor({ id, onChanged, onClose, onDirty, onOpenPage }: { id: Refe
         </div>
       )}
       <div className="row" style={{ marginBottom: 8 }}>
-        <Field label="Document" value={table.source?.document || ""} onChange={(v) => setSourceField(setSource, "document", v)} />
-        <Field label="Table, as printed" value={table.source?.table || ""} onChange={(v) => setSourceField(setSource, "table", v)} />
-        <Field label="Page" type="number" value={page ?? ""} onChange={(v) => setSourceField(setSource, "page", v === "" ? undefined : Number(v))} />
+        <Field label={catalog ? "Catalog or datasheet" : "Document"} value={table.source?.document || ""} onChange={(v) => setSourceField(setSource, "document", v)} needed={!table.source?.document} />
+        {/* A catalog table has no table number or page of the standard; each row names its own catalog page. */}
+        {!catalog && <Field label="Table, as printed" value={table.source?.table || ""} onChange={(v) => setSourceField(setSource, "table", v)} />}
+        {!catalog && <Field label="Page" type="number" value={page ?? ""} onChange={(v) => setSourceField(setSource, "page", v === "" ? undefined : Number(v))} />}
         {docLink && page ? <a href="#" className="small" onClick={(e) => { e.preventDefault(); onOpenPage(docLink, page); }}>Open page {page}</a> : null}
       </div>
 
@@ -283,12 +287,51 @@ function TableEditor({ id, onChanged, onClose, onDirty, onOpenPage }: { id: Refe
         </>
       )}
 
+      {(table.kind === "cable_dimensions" || table.kind === "heat_shrink" || table.kind === "lugs") && (
+        <label className="field" style={{ margin: "0 0 6px", maxWidth: 220 }}>
+          <span className="lbl">Diameters in</span>
+          <select value={table.diameter_unit || "mm"} onChange={(e) => set({ diameter_unit: e.target.value })}>
+            <option value="mm">millimetres</option><option value="in">inches</option>
+          </select>
+        </label>
+      )}
+
+      {table.kind === "cable_dimensions" && (
+        <>
+          <p className="small muted">Typed from the cable maker's catalog: the outside diameter of each size you use, so the calculator can pick the heat shrink that fits.</p>
+          <Grid
+            columns={[{ key: "size_awg", label: "Size (AWG)", required: true }, { key: "outside_diameter", label: `Outside diameter (${table.diameter_unit || "mm"})`, type: "number", required: true }, { key: "page", label: "Catalog page", type: "number" }]}
+            rows={table.rows || []} onRows={setRows} needed={() => false} blank={{ size_awg: "", outside_diameter: null, page: null }} catalog
+          />
+        </>
+      )}
+
+      {table.kind === "heat_shrink" && (
+        <>
+          <p className="small muted">Typed from the tubing maker's catalog: each size's inside diameter as supplied and after it has fully shrunk. The calculator picks the smallest size that slides over the cable and its lug and shrinks below the cable.</p>
+          <Grid
+            columns={[{ key: "size", label: "Size, as the catalog names it", required: true }, { key: "supplied_id", label: `Inside diameter as supplied (${table.diameter_unit || "mm"})`, type: "number", required: true }, { key: "recovered_id", label: `After shrinking (${table.diameter_unit || "mm"})`, type: "number", required: true }, { key: "adhesive", label: "Adhesive-lined", type: "bool" }, { key: "page", label: "Catalog page", type: "number" }]}
+            rows={table.rows || []} onRows={setRows} needed={() => false} blank={{ size: "", supplied_id: null, recovered_id: null, adhesive: false, page: null }} catalog
+          />
+        </>
+      )}
+
+      {table.kind === "lugs" && (
+        <>
+          <p className="small muted">Typed from the lug maker's catalog and your crimper's chart: one row per cable size and stud. The barrel diameter lets the heat shrink be sized over the lug; the crimp die is the setting for that lug and cable.</p>
+          <Grid
+            columns={[{ key: "size_awg", label: "Size (AWG)", required: true }, { key: "stud", label: "Stud (5/16, 3/8, M8…)", required: true }, { key: "part", label: "Part", required: true }, { key: "barrel_od", label: `Barrel outside diameter (${table.diameter_unit || "mm"})`, type: "number" }, { key: "crimp_die", label: "Crimp die or setting" }, { key: "page", label: "Catalog page", type: "number" }]}
+            rows={table.rows || []} onRows={setRows} needed={() => false} blank={{ size_awg: "", stud: "", part: "", barrel_od: null, crimp_die: "", page: null }} catalog
+          />
+        </>
+      )}
+
       {error && <div className="alert crit">{error}</div>}
       {saved && <div className="alert ok">{saved}</div>}
       <div className="row" style={{ marginTop: 8 }}>
         <button className="btn" disabled={busy} onClick={() => save("draft")}>Save as draft</button>
-        <button className="btn primary" disabled={busy || unread.length > 0} onClick={() => save("confirmed")} title={unread.length ? `${unread.length} highlighted cell(s) still need a value from the page` : "Press only when every cell matches the page"}>Confirm this table</button>
-        {unread.length > 0 && <span className="small muted">{unread.length} cell{unread.length === 1 ? "" : "s"} still need{unread.length === 1 ? "s" : ""} a value from the page before this table can be confirmed.</span>}
+        <button className="btn primary" disabled={busy || unread.length > 0} onClick={() => save("confirmed")} title={unread.length ? `${unread.length} highlighted cell(s) still need a value ${fromWhere}` : `Press only when every cell matches the ${catalog ? "catalog" : "page"}`}>Confirm this table</button>
+        {unread.length > 0 && <span className="small muted">{unread.length} cell{unread.length === 1 ? "" : "s"} still need{unread.length === 1 ? "s" : ""} a value {fromWhere} before this table can be confirmed.</span>}
       </div>
       {/* Deleting is not part of confirming, so it does not sit beside Confirm. */}
       {table.origin === "yours" && <div className="row" style={{ marginTop: 8, justifyContent: "flex-end" }}><button className="btn danger" disabled={busy} onClick={remove}>Delete my copy</button></div>}
@@ -298,6 +341,10 @@ function TableEditor({ id, onChanged, onClose, onDirty, onOpenPage }: { id: Refe
 
 const empty = (v: unknown) => v == null || v === "" || (typeof v === "number" && Number.isNaN(v));
 
+/** Tables typed from datasheets and catalogs: no page of the standard, nothing to import. */
+const CATALOG_KINDS = ["fuse_classes", "cable_dimensions", "heat_shrink", "lugs"];
+const isCatalog = (kind: string) => CATALOG_KINDS.includes(kind);
+
 /** The cells that still need a person: marked by the import, or required and
  *  never typed (an added row's cells start empty, never with a value). Cells
  *  the page may legitimately leave blank (an ampacity column, a grid cell,
@@ -306,7 +353,7 @@ function missingCells(t: ReferenceTable): string[] {
   const out: string[] = [];
   for (const [key, mark] of Object.entries(t.edits || {})) if (mark === "needed" || mark === "check") out.push(key);
   const page = t.source?.page;
-  if (empty(page) || page === 0) out.push("page");
+  if (!isCatalog(t.kind) && (empty(page) || page === 0)) out.push("page");
   if (!t.source?.document) out.push("document");
   const rows: Row[] = Array.isArray(t.rows) ? t.rows : [];
   rows.forEach((r, i) => {
@@ -318,6 +365,9 @@ function missingCells(t: ReferenceTable): string[] {
       case "bundling": need(empty(r.min_conductors), "from"); need(empty(r.factor), "factor"); need(empty(r.page) || r.page === 0, "page"); break;
       case "voltage_drop_grid": need(empty(r.current) || r.current === 0, "current"); need(empty(r.page) || r.page === 0, "page"); break;
       case "fuse_classes": need(!r.class, "class"); need(empty(r.interrupting_rating_a) || r.interrupting_rating_a === 0, "interrupting rating"); need(!r.source?.document, "datasheet"); need(empty(r.source?.page) || r.source?.page === 0, "datasheet page"); break;
+      case "cable_dimensions": need(!r.size_awg, "size"); need(empty(r.outside_diameter) || r.outside_diameter === 0, "outside diameter"); break;
+      case "heat_shrink": need(!r.size, "size"); need(empty(r.supplied_id) || r.supplied_id === 0, "supplied diameter"); need(empty(r.recovered_id) || r.recovered_id === 0, "shrunk diameter"); break;
+      case "lugs": need(!r.size_awg, "size"); need(!r.stud, "stud"); need(!r.part, "part"); break;
     }
   });
   if (t.kind === "constants" && (empty(t.values?.K_copper?.value) || t.values?.K_copper?.value === 0)) out.push("K");
@@ -339,8 +389,9 @@ function setSourceField(setSource: (p: Record<string, unknown>) => void, key: st
 
 /** What an empty table of this kind looks like, so the grid can be typed into before anything is imported. */
 function blankTable(t: ReferenceTable): ReferenceTable {
-  const base: ReferenceTable = { ...t, title: t.layout.title, status: "draft", source: { document: "ABYC E-11", page: undefined }, edits: {} };
+  const base: ReferenceTable = { ...t, title: t.layout.title, status: "draft", source: { document: isCatalog(t.kind) ? "" : "ABYC E-11", page: undefined }, edits: {} };
   switch (t.kind) {
+    case "cable_dimensions": case "heat_shrink": case "lugs": return { ...base, diameter_unit: "mm", rows: [] };
     case "constants": return { ...base, values: { K_copper: { value: 0, page: 0 } }, formula_as_printed: "", length_definition: "round_trip", edits: { "K_copper/value": "needed", length_definition: "check" } };
     case "ampacity": return { ...base, columns: { "105": "A" }, rows: [] };
     case "voltage_drop_grid": return { ...base, nominal_voltage: 12, drop_percent: t.id === "voltage_drop_3pct" ? 3 : 10, length_unit: "ft", length_definition: "round_trip", lengths: [], rows: [], edits: { nominal_voltage: "check", length_unit: "check", length_definition: "check" } };
@@ -357,12 +408,12 @@ function Field({ label, value, onChange, type = "text", needed }: { label: strin
   );
 }
 
-interface Col { key: string; label: string; type?: "text" | "number" | "list"; /** The page always prints this cell: empty means "not yet typed", never "nothing there". */ required?: boolean }
+interface Col { key: string; label: string; type?: "text" | "number" | "list" | "bool"; /** The page always prints this cell: empty means "not yet typed", never "nothing there". */ required?: boolean }
 
 /** An editable grid. A cell is a plain string or number; a dotted key
  *  ("values.105") reaches into a nested object. Empty means "the page
  *  prints nothing here" and is saved as null - never as a number. */
-function Grid({ columns, rows, onRows, needed, blank }: { columns: Col[]; rows: Row[]; onRows: (rows: Row[]) => void; needed: (row: Row, key: string) => boolean; blank: Row }) {
+function Grid({ columns, rows, onRows, needed, blank, catalog = false }: { columns: Col[]; rows: Row[]; onRows: (rows: Row[]) => void; needed: (row: Row, key: string) => boolean; blank: Row; /** Typed from a catalog: no page to copy from. */ catalog?: boolean }) {
   const get = (r: Row, key: string): any => key.split(".").reduce<any>((o, k) => (o == null ? undefined : o[k]), r);
   const setDeep = (r: Row, key: string, v: unknown): Row => {
     const [head, ...rest] = key.split(".");
@@ -373,6 +424,7 @@ function Grid({ columns, rows, onRows, needed, blank }: { columns: Col[]; rows: 
     let v: unknown = raw;
     if (type === "number") v = raw.trim() === "" ? null : Number(raw);
     if (type === "list") v = raw.split(",").map((x) => x.trim()).filter(Boolean);
+    if (type === "bool") v = raw === "yes";
     if (type === "text" || !type) v = raw === "" && key.startsWith("sizes.") ? null : raw;
     onRows(rows.map((r, j) => (j === i ? setDeep(r, key, v) : r)));
   };
@@ -383,7 +435,7 @@ function Grid({ columns, rows, onRows, needed, blank }: { columns: Col[]; rows: 
         <table className="small">
           <thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}<th></th></tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={columns.length + 1} className="muted">No rows yet. Copy the table from a page, or add rows and type them from the page.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={columns.length + 1} className="muted">{catalog ? "No rows yet. Add a row for each size you use and type it from the catalog." : "No rows yet. Copy the table from a page, or add rows and type them from the page."}</td></tr>}
             {rows.map((r, i) => (
               <tr key={i}>
                 {columns.map((c) => {
@@ -391,7 +443,8 @@ function Grid({ columns, rows, onRows, needed, blank }: { columns: Col[]; rows: 
                   // Highlighted: marked by the import, a required cell never typed, or a
                   // number the import could not read (it writes 0 and marks it).
                   const ask = needed(r, c.key) || (c.required && (v == null || v === "")) || (c.type === "number" && v === 0 && c.key !== "min_conductors");
-                  return <td key={c.key}><input type={c.type === "number" ? "number" : "text"} step="any" value={show(v, c.type)} placeholder={ask ? "from the page" : ""} aria-label={c.label} className={ask ? "ref-needed" : undefined} onChange={(e) => update(i, c.key, e.target.value, c.type)} /></td>;
+                  if (c.type === "bool") return <td key={c.key}><label className="small"><input type="checkbox" checked={Boolean(v)} aria-label={c.label} onChange={(e) => update(i, c.key, e.target.checked ? "yes" : "no", c.type)} /> yes</label></td>;
+                  return <td key={c.key}><input type={c.type === "number" ? "number" : "text"} step="any" value={show(v, c.type)} placeholder={ask ? (catalog ? "from the catalog" : "from the page") : ""} aria-label={c.label} className={ask ? "ref-needed" : undefined} onChange={(e) => update(i, c.key, e.target.value, c.type)} /></td>;
                 })}
                 <td><button className="btn sm" title="Remove this row" aria-label="Remove this row" onClick={() => onRows(rows.filter((_, j) => j !== i))}>×</button></td>
               </tr>
@@ -437,7 +490,7 @@ function CheatSheetEditor({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="card tight" style={{ marginTop: 12 }}>
       <h4 style={{ margin: 0 }}>Installation reminders</h4>
-      <p className="small muted" style={{ marginTop: 4 }}>One line per rule, in your words, with the clause and page as printed in your copy. Tags say when a reminder rides along with a calculation: <span className="mono">always</span>, <span className="mono">engine_space</span>, <span className="mono">bundled</span>, <span className="mono">parallel</span>, or a load such as <span className="mono">inverter</span>.</p>
+      <p className="small muted" style={{ marginTop: 4 }}>One line per rule, in your words, with the clause and page as printed in your copy. Tags say when a reminder rides along with a calculation: <span className="mono">always</span>, <span className="mono">engine_space</span>, <span className="mono">bundled</span>, <span className="mono">parallel</span>, a load such as <span className="mono">inverter</span>, or what the circuit feeds: <span className="mono">battery_main</span>, <span className="mono">charger</span>, <span className="mono">alternator</span>, <span className="mono">dc_dc</span>, <span className="mono">solar</span>, <span className="mono">windlass</span>, <span className="mono">starter</span>, <span className="mono">bilge_pump</span>, <span className="mono">lights</span>, <span className="mono">electronics</span>.</p>
       <div className="row" style={{ marginBottom: 8 }}>
         <Field label="Standard" value={doc} onChange={setDoc} />
         <Field label="Edition" value={edition} onChange={setEdition} />

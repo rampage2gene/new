@@ -6,8 +6,8 @@
   "type": "object",
   "required": ["id", "kind", "title", "status", "source"],
   "properties": {
-    "id": { "enum": ["constants", "circular_mils", "ampacity_outside_engine_space", "ampacity_inside_engine_space", "bundling_factors", "voltage_drop_3pct", "voltage_drop_10pct", "fuse_classes"] },
-    "kind": { "enum": ["constants", "circular_mils", "ampacity", "bundling", "voltage_drop_grid", "fuse_classes"] },
+    "id": { "enum": ["constants", "circular_mils", "ampacity_outside_engine_space", "ampacity_inside_engine_space", "bundling_factors", "voltage_drop_3pct", "voltage_drop_10pct", "fuse_classes", "cable_dimensions", "heat_shrink", "lugs"] },
+    "kind": { "enum": ["constants", "circular_mils", "ampacity", "bundling", "voltage_drop_grid", "fuse_classes", "cable_dimensions", "heat_shrink", "lugs"] },
     "title": { "type": "string", "description": "The table's title as printed." },
     "status": { "enum": ["draft", "confirmed", "fixture"] },
     "source": {
@@ -17,7 +17,7 @@
         "document": { "type": "string" },
         "edition": { "type": "string" },
         "table": { "type": "string", "description": "The table's number as printed, e.g. 'Table VI-A'." },
-        "page": { "type": "integer", "minimum": 1, "description": "Required for every kind except fuse_classes, whose rows each cite a datasheet." },
+        "page": { "type": "integer", "minimum": 1, "description": "Required for every kind from the standard; optional for fuse_classes, cable_dimensions, heat_shrink and lugs, which are typed from datasheets and catalogs (source.document names them)." },
         "document_id": { "type": "string", "description": "The document's id inside the desktop app, when it was imported there." }
       }
     },
@@ -71,6 +71,30 @@
       "properties": {
         "kind": { "const": "fuse_classes" },
         "rows": { "type": "array", "items": { "type": "object", "required": ["class", "interrupting_rating_a", "suits", "source"], "properties": { "class": { "type": "string" }, "interrupting_rating_a": { "type": "number" }, "voltage_rating_v": { "type": ["number", "null"] }, "suits": { "type": "array", "items": { "type": "string" }, "description": "Load types (keys of device_profiles) this class suits." }, "source": { "type": "object", "required": ["document", "page"], "properties": { "document": { "type": "string" }, "page": { "type": "integer", "minimum": 1 } } } } } }
+      },
+      "required": ["rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "cable_dimensions" },
+        "diameter_unit": { "enum": ["mm", "in"] },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["size_awg", "outside_diameter"], "properties": { "size_awg": { "type": "string" }, "outside_diameter": { "type": "number", "exclusiveMinimum": 0 }, "page": { "type": ["integer", "null"], "minimum": 1 } } } }
+      },
+      "required": ["diameter_unit", "rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "heat_shrink" },
+        "diameter_unit": { "enum": ["mm", "in"] },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["size", "supplied_id", "recovered_id"], "properties": { "size": { "type": "string" }, "supplied_id": { "type": "number", "description": "Inside diameter as supplied." }, "recovered_id": { "type": "number", "description": "Inside diameter after full shrink; below supplied_id." }, "adhesive": { "type": "boolean" }, "page": { "type": ["integer", "null"], "minimum": 1 } } } }
+      },
+      "required": ["diameter_unit", "rows"]
+    },
+    {
+      "properties": {
+        "kind": { "const": "lugs" },
+        "diameter_unit": { "enum": ["mm", "in"], "description": "Unit of barrel_od; mm when absent." },
+        "rows": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["size_awg", "stud", "part"], "properties": { "size_awg": { "type": "string" }, "stud": { "type": "string", "description": "As the catalog names it: 5/16, 3/8, M8, M10." }, "part": { "type": "string" }, "barrel_od": { "type": ["number", "null"] }, "crimp_die": { "type": ["string", "null"] }, "page": { "type": ["integer", "null"], "minimum": 1 } } } }
       },
       "required": ["rows"]
     }

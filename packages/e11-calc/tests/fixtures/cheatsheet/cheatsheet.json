@@ -1,8 +1,9 @@
 {
-  "source": { "document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "edition": "fixture" },
+  "source": {"document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "edition": "fixture"},
   "entries": [
-    { "topic": "Overcurrent protection", "rule": "Fixture rule A: every positive conductor carries a fuse near its source.", "clause": "F.1", "page": 1, "applies_to": ["always"], "status": "confirmed" },
-    { "topic": "Parallel conductors", "rule": "Fixture rule B: paralleled conductors share one fuse sized for the set | and are the same length.", "clause": "F.2", "page": 2, "applies_to": ["parallel"], "status": "draft" },
-    { "topic": "Engine spaces", "rule": "Fixture rule C: derate conductors in engine spaces.", "clause": "F.3", "page": 3, "applies_to": ["engine_space"], "status": "confirmed" }
+    {"topic": "Overcurrent protection", "rule": "Fixture rule A: every positive conductor carries a fuse near its source.", "clause": "F.1", "page": 1, "applies_to": ["always"], "status": "confirmed"},
+    {"topic": "Parallel conductors", "rule": "Fixture rule B: paralleled conductors share one fuse sized for the set | and are the same length.", "clause": "F.2", "page": 2, "applies_to": ["parallel"], "status": "draft"},
+    {"topic": "Engine spaces", "rule": "Fixture rule C: derate conductors in engine spaces.", "clause": "F.3", "page": 3, "applies_to": ["engine_space"], "status": "confirmed"},
+    {"topic": "Inverters", "rule": "Fixture rule D: an inverter feed carries a fuse of the class its bank needs.", "clause": "F.4", "page": 4, "applies_to": ["inverter"], "status": "confirmed"}
   ]
 }

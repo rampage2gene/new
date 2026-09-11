@@ -8,7 +8,7 @@
  * directory reader lives in node.ts.
  */
 import type { E11Table, E11Tables, TableId, TableStatus } from "./schema.js";
-import { TABLE_IDS } from "./schema.js";
+import { CATALOG_KINDS, TABLE_IDS } from "./schema.js";
 
 export class TableError extends Error {
   constructor(public readonly file: string, message: string) {
@@ -46,7 +46,7 @@ export function validateTable(file: string, raw: unknown): E11Table {
   need(file, STATUSES.includes(t.status as TableStatus), `status must be one of ${STATUSES.join(", ")}`);
   need(file, isRecord(t.source) && typeof t.source.document === "string", "has no source.document");
   const source = t.source as Record<string, unknown>;
-  if (t.kind !== "fuse_classes") {
+  if (!(CATALOG_KINDS as readonly string[]).includes(String(t.kind))) {
     need(file, isPage(source.page), "has no source.page - every table must say which page it was copied from");
   }
   const rows = t.rows;
@@ -100,6 +100,32 @@ export function validateTable(file: string, raw: unknown): E11Table {
       for (const r of rows as unknown[]) {
         if (!isRecord(r) || typeof r.class !== "string" || typeof r.interrupting_rating_a !== "number" || !Array.isArray(r.suits)) throw new TableError(file, "every fuse_classes row needs class, interrupting_rating_a and suits");
         if (!isRecord(r.source) || typeof r.source.document !== "string" || !isPage(r.source.page)) throw new TableError(file, `fuse class ${r.class} needs source.document and source.page (the datasheet it was read from)`);
+      }
+      break;
+    }
+    case "cable_dimensions": {
+      need(file, t.diameter_unit === "mm" || t.diameter_unit === "in", 'cable_dimensions needs diameter_unit "mm" or "in"');
+      need(file, Array.isArray(rows) && rows.length > 0, "needs rows");
+      for (const r of rows as unknown[]) {
+        need(file, isRecord(r) && typeof r.size_awg === "string" && typeof r.outside_diameter === "number" && r.outside_diameter > 0 && (r.page == null || isPage(r.page)), "every cable_dimensions row needs size_awg and an outside_diameter above zero");
+      }
+      break;
+    }
+    case "heat_shrink": {
+      need(file, t.diameter_unit === "mm" || t.diameter_unit === "in", 'heat_shrink needs diameter_unit "mm" or "in"');
+      need(file, Array.isArray(rows) && rows.length > 0, "needs rows");
+      for (const r of rows as unknown[]) {
+        need(file, isRecord(r) && typeof r.size === "string" && typeof r.supplied_id === "number" && typeof r.recovered_id === "number" && (r.page == null || isPage(r.page)), "every heat_shrink row needs size, supplied_id and recovered_id");
+        const row = r as Record<string, number>;
+        need(file, row.recovered_id > 0 && row.recovered_id < row.supplied_id, `heat shrink ${String((r as Record<string, unknown>).size)}: recovered_id must be above zero and below supplied_id (it shrinks)`);
+      }
+      break;
+    }
+    case "lugs": {
+      need(file, t.diameter_unit == null || t.diameter_unit === "mm" || t.diameter_unit === "in", 'lugs diameter_unit must be "mm" or "in" when given');
+      need(file, Array.isArray(rows) && rows.length > 0, "needs rows");
+      for (const r of rows as unknown[]) {
+        need(file, isRecord(r) && typeof r.size_awg === "string" && typeof r.stud === "string" && typeof r.part === "string" && (r.barrel_od == null || typeof r.barrel_od === "number") && (r.crimp_die == null || typeof r.crimp_die === "string") && (r.page == null || isPage(r.page)), "every lugs row needs size_awg, stud and part");
       }
       break;
     }

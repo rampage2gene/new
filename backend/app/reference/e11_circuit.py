@@ -12,6 +12,7 @@ Every step either cites a page, says "you", or is a blank with an ask.
 from __future__ import annotations
 
 from .e11_cheatsheet import reminders_for
+from .e11_fittings import fittings_for
 from .e11_protection import GUIDANCE_LABEL, fuse_for_conductor, interrupting_check
 from .e11_sizing import (
     _fmt, ampacity_of, bundling_factor, circular_mils_of, compare_sizes, is_blank, length_ft, nearest_metric,
@@ -39,7 +40,16 @@ def size_circuit(inputs: dict, tables: E11Tables, own: dict | None = None, sheet
 
     voltage = float(inputs["system_voltage"])
     current = float(inputs["current"])
-    l_ft = length_ft(float(inputs["length"]), inputs.get("length_unit", "m"))
+    # The length as typed is the whole loop or one way; the tables' own
+    # definition of L (round trip or one way, as each page words it) is applied
+    # downstream, so here it is brought to one way.
+    loop = inputs.get("length_basis") == "loop"
+    length = float(inputs["length"])
+    unit = inputs.get("length_unit", "m")
+    one_way = length / 2 if loop else length
+    l_ft = length_ft(one_way, unit)
+    if loop:
+        steps.append(f"Length: {_fmt(length)} {unit} there and back, {_fmt(round_half_up(one_way, 2))} {unit} each way.")
     drop = float(inputs["max_drop_percent"])
     rating = float(inputs.get("insulation_rating_c", 105))
     engine = bool(inputs.get("engine_space", False))
@@ -223,8 +233,20 @@ def size_circuit(inputs: dict, tables: E11Tables, own: dict | None = None, sheet
         else:
             steps.append(f"Interrupting capacity: {ic['reason']}")
 
-    # 7. Reminders that apply.
+    # 7. The fittings for that conductor, from the owner's catalog tables.
+    loop_length = length if loop else 2 * length
+    fit = fittings_for(size, parallel, inputs.get("stud_size"), loop_length, unit, tables, own)
+    blanks.extend(fit["blanks"])
+    steps.extend(fit["steps"])
+
+    # 8. Reminders that apply.
     tags = ["dc", load_type]
+    circuit_type = inputs.get("circuit_type")
+    if circuit_type:
+        from ..calculators.modules import CIRCUIT_TYPES  # lazy: modules registers the calculator that imports this module
+
+        tags.append(circuit_type)
+        tags.extend(CIRCUIT_TYPES.get(circuit_type, {}).get("tags", []))
     if engine:
         tags.append("engine_space")
     if bundled >= 3:
@@ -246,6 +268,7 @@ def size_circuit(inputs: dict, tables: E11Tables, own: dict | None = None, sheet
             "drop_at_size": opt({"volts": drop_v, "percent": drop_pct}, reason=drop_reason),
         },
         "protection": protection,
+        "fittings": fit["fittings"],
         "reminders": reminders,
         "blanks": blanks,
         "steps": steps,

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEVICE_PROFILES, STANDARD_FUSE_SIZES_A, STANDARD_BREAKER_SIZES_A, fuseForConductor, interruptingCheck, isBlank } from "../dist/index.js";
+import { DEVICE_PROFILES, STANDARD_FUSE_SIZES_A, STANDARD_BREAKER_SIZES_A, fuseForConductor, interruptingCheck, isBlank, CIRCUIT_TYPES } from "../dist/index.js";
 import { HERE, fixtureTables } from "./helpers.mjs";
 
 const T = fixtureTables();
@@ -12,6 +12,8 @@ test("the TypeScript profiles equal profiles/device_profiles.json, the contract 
   assert.deepEqual(DEVICE_PROFILES, json.device_profiles);
   assert.deepEqual(STANDARD_FUSE_SIZES_A, json.standard_fuse_sizes_a);
   assert.deepEqual(STANDARD_BREAKER_SIZES_A, json.standard_breaker_sizes_a);
+  assert.deepEqual(CIRCUIT_TYPES, json.circuit_types);
+  for (const c of Object.values(CIRCUIT_TYPES)) assert.ok(DEVICE_PROFILES[c.load_type], `${c.label}: load profile ${c.load_type}`);
 });
 
 test("a fuse is at least the load times its factor and never above the conductor", () => {

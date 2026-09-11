@@ -426,6 +426,24 @@ DEVICE_PROFILES: dict[str, dict] = {
 }
 
 
+# Kinds of circuit, each mapped to the load profile that protects it and to the
+# tags that pick the owner's reminders for it. Industry guidance, held equal to
+# packages/e11-calc/profiles/device_profiles.json by a test.
+CIRCUIT_TYPES: dict[str, dict] = {
+    "battery_main": {"label": "Battery to main switch or panel feed", "load_type": "battery_main", "tags": ["battery_main"]},
+    "inverter": {"label": "Inverter or inverter-charger", "load_type": "inverter", "tags": ["inverter"]},
+    "charger": {"label": "Battery charger output", "load_type": "battery_charger", "tags": ["charger"]},
+    "alternator": {"label": "Alternator output", "load_type": "alternator", "tags": ["alternator"]},
+    "dc_dc": {"label": "DC-DC converter", "load_type": "dc_dc", "tags": ["dc_dc"]},
+    "solar": {"label": "Solar controller", "load_type": "solar", "tags": ["solar"]},
+    "windlass": {"label": "Windlass, thruster, winch", "load_type": "motor", "tags": ["windlass", "motor"]},
+    "starter": {"label": "Engine starter", "load_type": "motor", "tags": ["starter", "motor"]},
+    "bilge_pump": {"label": "Bilge pump", "load_type": "motor", "tags": ["bilge_pump", "motor"]},
+    "lights": {"label": "Navigation and other lights", "load_type": "resistive", "tags": ["lights"]},
+    "electronics": {"label": "Electronics, instruments", "load_type": "electronics", "tags": ["electronics"]},
+    "general_dc": {"label": "Other DC load", "load_type": "resistive", "tags": []},
+}
+
 TYPICAL_NOTE = "Typical published value; verify against the wire's actual rating"
 
 
@@ -619,7 +637,13 @@ def _yes(v) -> bool:
 
 
 # The `own.*` fields the reference engine asks for -> the answer inputs below.
-ANSWER_INPUTS = {"own.ampacity_a": "own_ampacity_a", "own.bundling_factor": "own_bundling_factor", "own.k": "own_k", "own.short_circuit_a": "own_short_circuit_a"}
+# `own.stud` is answered by the stud input itself.
+ANSWER_INPUTS = {
+    "own.ampacity_a": "own_ampacity_a", "own.bundling_factor": "own_bundling_factor", "own.k": "own_k", "own.short_circuit_a": "own_short_circuit_a",
+    "own.cable_od_mm": "own_cable_od_mm", "own.heat_shrink_size": "own_heat_shrink_size", "own.lug_part": "own_lug_part", "own.crimp_die": "own_crimp_die",
+    "own.stud": "stud_size",
+}
+TEXT_ANSWERS = {"own.heat_shrink_size", "own.lug_part", "own.crimp_die", "own.stud"}
 
 
 def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
@@ -636,12 +660,23 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
     if not limit or limit <= 0:
         raise CalculationError("Give the drop limit as a percentage above zero")
     bundled = int(num(i, "bundled_conductors") or 2) if _yes(i["bundled"].value) else 2
+    circuit_type = str(i["circuit_type"].value or "general_dc")
+    ctype = CIRCUIT_TYPES.get(circuit_type, CIRCUIT_TYPES["general_dc"])
+    stud = str(i["stud_size"].value or "").strip() or None
     inputs = {
-        "system_voltage": num(i, "system_voltage"), "current": num(i, "current"), "length": num(i, "length"), "length_unit": (i["length_unit"].value or "m").lower()[:1].replace("f", "ft").replace("m", "m"),
+        "system_voltage": num(i, "system_voltage"), "current": num(i, "current"), "length": num(i, "length"), "length_basis": "loop",
+        "length_unit": (i["length_unit"].value or "m").lower()[:1].replace("f", "ft").replace("m", "m"),
         "max_drop_percent": limit, "insulation_rating_c": num(i, "insulation_rating_c") or 105, "engine_space": _yes(i["engine_space"].value),
-        "bundled_conductors": bundled, "load_type": i["load_type"].value or "resistive", "short_circuit_a": num(i, "short_circuit_a"), "manufacturer_fuse_a": num(i, "manufacturer_fuse"),
+        "bundled_conductors": bundled, "load_type": ctype["load_type"], "circuit_type": circuit_type, "stud_size": stud,
+        "short_circuit_a": num(i, "short_circuit_a"), "manufacturer_fuse_a": num(i, "manufacturer_fuse"),
     }
-    own = {key.split(".", 1)[1]: num(i, inp) for key, inp in ANSWER_INPUTS.items() if num(i, inp) is not None}
+    own: dict = {}
+    for key, inp in ANSWER_INPUTS.items():
+        if key == "own.stud":
+            continue
+        value = str(i[inp].value or "").strip() if key in TEXT_ANSWERS else num(i, inp)
+        if value not in (None, ""):
+            own[key.split(".", 1)[1]] = value
     tables = e11_tables.get_tables()
     sheet, _ = e11_cheatsheet.get_cheatsheet()
     common = dict(calculator_id="circuit_e11", calculator_name="Circuit: conductor and protection (ABYC E-11)", formula="CM = K × I × L / E; ampacity × bundling factor; the larger wins; fuse ≥ load × k and ≤ conductor ampacity", inputs=i, classification="recommended_pending_verification")
@@ -650,12 +685,16 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
         return CalcResult(**common, steps=[], results=[ResultValue("size_awg", "Conductor size", None, "AWG", note=reason, group="Conductor")], asks=[{"field": "reference", "input_key": None, "unit": None, "prompt": reason}], warnings=[reason])
 
     r = size_circuit(inputs, tables, own, sheet)
-    c, p = r["conductor"], r["protection"]
+    c, p, ft = r["conductor"], r["protection"], r["fittings"]
 
     def cite(src: dict | None) -> str:
         if not src:
             return ""
-        return "entered by you" if "by" in src else f"ABYC E-11, {src.get('title') or src.get('table')}, page {src['page']}"
+        if "by" in src:
+            return "entered by you"
+        if "document" in src:
+            return f"From {src['document']}" + (f", page {src['page']}" if src.get("page") else "")
+        return f"ABYC E-11, {src.get('title') or src.get('table')}, page {src['page']}"
 
     results: list[ResultValue] = []
     size_text = f"{c['parallel']} × {c['size_awg']} AWG in parallel" if c["size_awg"] and c["parallel"] > 1 else (f"{c['size_awg']} AWG" if c["size_awg"] else None)
@@ -682,14 +721,39 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
     ic = p["interrupting"]
     classes = ", ".join(f"{x['class']} ({fmt(x['interrupting_rating_a'])} A{', suits this load' if x['suits_load'] else ''})" for x in ic["classes"]) or None
     results.append(ResultValue("interrupting", "Fuse classes with enough interrupting capacity", classes, None, classification="recommended_pending_verification", note=ic.get("reason") or (f"The source can deliver {fmt(ic['required_a'])} A; ratings from the makers' datasheets" if classes else None), group="Protection"))
+    results.append(ResultValue("load_type", "Load type", DEVICE_PROFILES[ctype["load_type"]]["label"], None, classification="recommended_pending_verification", note=f"Industry guidance, from the circuit type \"{ctype['label']}\": {DEVICE_PROFILES[ctype['load_type']]['surge_note']}", group="Protection"))
+
+    # Fittings: from the owner's catalog tables, or the person; never typical.
+    od, hs, lug = ft["cable_od"], ft["heat_shrink"], ft["lug"]
+    results.append(ResultValue("cable_od", "Cable outside diameter", od["value"], od["unit"], classification="documented_value", note=od.get("reason") or cite(od.get("source")), group="Fittings"))
+    hs_text = None
+    if hs["size"]:
+        hs_text = hs["size"] + (f" ({fmt(hs['supplied_id'])} → {fmt(hs['recovered_id'])} {hs['unit']}{', adhesive-lined' if hs['adhesive'] else ''})" if hs["supplied_id"] is not None else "")
+    results.append(ResultValue("heat_shrink", "Heat-shrink tubing", hs_text, None, classification="documented_value", note=hs.get("reason") or cite(hs.get("source")), group="Fittings"))
+    results.append(ResultValue("lug", "Lug or terminal", f"{lug['part']} for a {lug['stud']} stud" if lug["part"] else None, None, classification="documented_value", note=lug.get("reason") or cite(lug.get("source")), group="Fittings"))
+    results.append(ResultValue("crimp_die", "Crimp die or setting", lug["crimp_die"], None, classification="documented_value", note=lug.get("die_reason") or cite(lug.get("die_source")) or ("No lug, so no die." if not lug["part"] else None), group="Fittings"))
+
+    # Bill of materials: counts for the set, from the parallel count and the loop length (arithmetic).
+    q = ft["quantities"]
+    if q and c["size_awg"]:
+        n = q["cables"]
+        results.append(ResultValue("bom_cable", "Cable to buy", f"{n} × {c['size_awg']} AWG, {fmt(q['cable_length'])} {q['length_unit']}", None, classification="calculated_estimate", note=f"{fmt(inputs['length'])} {q['length_unit']} there and back per cable, plus your own routing allowance; none is added here.", group="Bill of materials"))
+        results.append(ResultValue("bom_lugs", "Lugs", f"{q['lugs']} × {lug['part']}" if lug["part"] else f"{q['lugs']} lugs needed; part not chosen yet", None, classification="calculated_estimate", note="Two per cable.", group="Bill of materials"))
+        results.append(ResultValue("bom_heat_shrink", "Heat shrink", f"{q['heat_shrink_pieces']} pieces of {hs['size']}" if hs["size"] else f"{q['heat_shrink_pieces']} pieces needed; size not chosen yet", None, classification="calculated_estimate", note="Two per cable, one over each lug barrel.", group="Bill of materials"))
+        results.append(ResultValue("bom_fuse", "Fuse or breaker", f"1 × {fmt(p['fuse_a'])} A, {p['characteristic']}" if p["fuse_a"] is not None else "1, rating not yet settled", None, classification="recommended_pending_verification", note=p["guidance"] if p["fuse_a"] is not None else p.get("reason"), group="Bill of materials"))
 
     asks = []
     for b in r["blanks"]:
         ask = b.get("ask")
-        asks.append({"field": b["field"], "reason": b["reason"], "input_key": ANSWER_INPUTS.get(ask["field"]) if ask else None, "unit": ask["unit"] if ask else None, "prompt": ask["prompt"] if ask else b["reason"]})
+        asks.append({"field": b["field"], "reason": b["reason"], "input_key": ANSWER_INPUTS.get(ask["field"]) if ask else None, "unit": ask["unit"] if ask else None, "prompt": ask["prompt"] if ask else b["reason"], "kind": (ask.get("kind") or "number") if ask else None})
     warnings = [b["reason"] for b in r["blanks"] if not b.get("ask")]
     if p["fits_conductor"] is False:
         warnings.append(p["reason"])
+    # A typed fitting skips the fit checks a catalog row gets; say so.
+    if hs.get("source") == {"by": "you"}:
+        warnings.append(f"The heat-shrink size you typed ({hs['size']}) was not checked against the cable and lug diameters; a row in your heat-shrink table would be.")
+    if lug.get("source") == {"by": "you"}:
+        warnings.append(f"The lug part you typed ({lug['part']}) was not checked against the stud size; a row in your lugs table would be.")
     sources: list[SourceRef] = []
     seen = set()
     for src in (vd.get("source"), pt.get("source"), am.get("source")):
@@ -709,12 +773,13 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
 CIRCUIT_E11 = Calculator(
     CalculatorSpec(
         id="circuit_e11", name="Circuit: conductor and protection (ABYC E-11)", category="Conductors",
-        description="From current, length and any nominal voltage to the conductor size (voltage drop first, then the current it must carry with engine-space and bundling derating, conductors in parallel when one is not enough) and the fuse for that conductor - from your confirmed copy of ABYC E-11, every number with its page. What the tables do not cover comes back as a blank you can fill in.",
+        description="From current, the length there and back, and any nominal voltage to the conductor size (voltage drop first, then the current it must carry with engine-space and bundling derating, conductors in parallel when one is not enough), the fuse for that conductor, the fittings for each cable (heat shrink, lug, crimp die from your own catalogs) and the bill of materials - from your confirmed copy of ABYC E-11, every number with its page. What the tables do not cover comes back as a blank you can fill in.",
         formula="CM = K × I × L / E; ampacity × bundling factor; larger wins; fuse ≥ load × k, ≤ conductor",
         inputs=[
             InputSpec("system_voltage", "System voltage", "V", entity_types=["voltage"], qualifiers=["nominal"], help="any nominal voltage: 12, 24, 32, 36, 48…"),
+            InputSpec("circuit_type", "What the circuit feeds", None, kind="select", default="general_dc", options=[{"value": k, "label": v["label"]} for k, v in CIRCUIT_TYPES.items()], help="sets how the load behaves and which of your reminders apply"),
             InputSpec("current", "Circuit current", "A", entity_types=["current", "fuse", "breaker"], qualifiers=["continuous", "maximum"]),
-            InputSpec("length", "One-way length", None, help="Distance from the source to the load"),
+            InputSpec("length", "Total length of the run, there and back", None, help="from the source to the device and back to the source"),
             InputSpec("length_unit", "Length unit", None, kind="select", default="m", options=[{"value": "m", "label": "metres"}, {"value": "ft", "label": "feet"}]),
             InputSpec("max_drop_percent", "Voltage-drop limit", None, kind="select", default="3", options=[{"value": "3", "label": "3 % (critical circuits)"}, {"value": "10", "label": "10 % (non-critical)"}, {"value": "other", "label": "other"}]),
             InputSpec("max_drop_other", "Other limit", "%", required=False, help="only when the limit is 'other'"),
@@ -722,13 +787,17 @@ CIRCUIT_E11 = Calculator(
             InputSpec("engine_space", "Runs through an engine space", None, kind="select", default="no", options=[{"value": "no", "label": "No"}, {"value": "yes", "label": "Yes"}]),
             InputSpec("bundled", "Bundled with other conductors", None, kind="select", default="no", options=[{"value": "no", "label": "No"}, {"value": "yes", "label": "Yes"}]),
             InputSpec("bundled_conductors", "Current-carrying conductors in the bundle", None, required=False, help="this circuit's two included"),
-            InputSpec("load_type", "Load", None, kind="select", default="resistive", options=[{"value": k, "label": v["label"]} for k, v in DEVICE_PROFILES.items()]),
+            InputSpec("stud_size", "Terminal stud the lugs land on", None, kind="text", required=False, help="as the lug catalog names it: 5/16, 3/8, M8, M10"),
             InputSpec("short_circuit_a", "Source short-circuit current", "A", required=False, entity_types=["current"], qualifiers=["short circuit", "short-circuit", "fault"], help="from the battery datasheet"),
             InputSpec("manufacturer_fuse", "Maker's stated fuse", "A", required=False, entity_types=["fuse", "breaker"], qualifiers=["recommended", "required"]),
             InputSpec("own_ampacity_a", "Allowable current from the page", "A", required=False, answers="conductor.ampacity.size_awg"),
             InputSpec("own_bundling_factor", "Bundling factor from the page", None, required=False, answers="conductor.ampacity.size_awg"),
             InputSpec("own_k", "K from the page", None, required=False, answers="conductor.voltage_drop.cm_required"),
             InputSpec("own_short_circuit_a", "Source short-circuit current from the datasheet", "A", required=False, answers="protection.interrupting.required_a"),
+            InputSpec("own_cable_od_mm", "Cable outside diameter from the catalog", "mm", required=False, answers="fittings.cable_od"),
+            InputSpec("own_heat_shrink_size", "Heat-shrink size from the catalog", None, kind="text", required=False, answers="fittings.heat_shrink.size"),
+            InputSpec("own_lug_part", "Lug part from the catalog", None, kind="text", required=False, answers="fittings.lug.part"),
+            InputSpec("own_crimp_die", "Crimp die from the crimper's chart", None, kind="text", required=False, answers="fittings.lug.crimp_die"),
         ],
         outputs=[{"key": "size_awg", "label": "Conductor size"}, {"key": "fuse_a", "label": "Fuse or breaker", "unit": "A"}],
         notes=["Every table value cites its page in your confirmed copy of ABYC E-11. What the tables do not cover comes back blank, with a box for the value from the page; what you type is marked as yours."],

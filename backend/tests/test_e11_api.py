@@ -16,7 +16,8 @@ def _fixture(name: str) -> dict:
     return json.loads((LIB / "tests" / "fixtures" / "tables" / f"{name}.json").read_text(encoding="utf-8"))
 
 
-BASE = {"system_voltage": 24, "current": 10, "length": 5, "length_unit": "m", "max_drop_percent": "3", "insulation_rating_c": 105, "engine_space": "no", "bundled": "no", "load_type": "resistive"}
+# The length is the whole loop (10 m there and back = the vectors' 5 m one way); the stud is given so the fixture lugs table answers.
+BASE = {"system_voltage": 24, "current": 10, "length": 10, "length_unit": "m", "max_drop_percent": "3", "insulation_rating_c": 105, "engine_space": "no", "bundled": "no", "circuit_type": "general_dc", "stud_size": "5/16"}
 
 
 def _run(client, **inputs) -> dict:
@@ -29,7 +30,13 @@ def test_circuit_calculator_is_registered_with_answer_inputs(client):
     specs = {s["id"]: s for s in client.get("/api/calculators").json()}
     spec = specs["circuit_e11"]
     answers = {i["key"]: i["answers"] for i in spec["inputs"] if i.get("answers")}
-    assert answers == {"own_ampacity_a": "conductor.ampacity.size_awg", "own_bundling_factor": "conductor.ampacity.size_awg", "own_k": "conductor.voltage_drop.cm_required", "own_short_circuit_a": "protection.interrupting.required_a"}
+    assert answers == {
+        "own_ampacity_a": "conductor.ampacity.size_awg", "own_bundling_factor": "conductor.ampacity.size_awg", "own_k": "conductor.voltage_drop.cm_required", "own_short_circuit_a": "protection.interrupting.required_a",
+        "own_cable_od_mm": "fittings.cable_od", "own_heat_shrink_size": "fittings.heat_shrink.size", "own_lug_part": "fittings.lug.part", "own_crimp_die": "fittings.lug.crimp_die",
+    }
+    length = next(i for i in spec["inputs"] if i["key"] == "length")
+    assert "there and back" in length["label"]
+    assert [o["value"] for o in next(i for i in spec["inputs"] if i["key"] == "circuit_type")["options"]][:2] == ["battery_main", "inverter"]
     assert "entity" not in spec["description"].lower()
 
 
@@ -61,15 +68,65 @@ def test_a_blank_becomes_a_value_when_the_person_answers(client):
 
 
 def test_parallel_conductors_and_the_fuse_for_them(client):
-    r = _run(client, current=100, length=2, max_drop_percent="10", load_type="battery_main", short_circuit_a=5000)
+    r = _run(client, current=100, length=4, max_drop_percent="10", circuit_type="battery_main", short_circuit_a=5000)
     by = {x["key"]: x for x in r["results"]}
     assert by["size_awg"]["value"] == "2 × 12 AWG in parallel"
     assert by["fuse_a"]["value"] == 100 and "Class X" in by["interrupting"]["value"]
     assert r["asks"] == [] and any(e["clause"] == "F.2" for e in r["reminders"])
 
 
+def test_fittings_and_bill_of_materials_come_from_the_catalog_tables(client):
+    r = _run(client)
+    by = {x["key"]: x for x in r["results"]}
+    assert by["cable_od"]["value"] == 4 and by["cable_od"]["unit"] == "mm" and by["cable_od"]["group"] == "Fittings"
+    assert by["cable_od"]["note"].startswith("From SYNTHETIC TEST FIXTURE - not a cable catalog, page 1")
+    assert by["heat_shrink"]["value"] == "S12 (12 → 4 mm, adhesive-lined)"
+    assert by["lug"]["value"] == "L12-516 for a 5/16 stud" and by["crimp_die"]["value"] == "D12"
+    assert by["load_type"]["value"] == "Resistive load (heater, lights)" and "circuit type" in by["load_type"]["note"]
+    assert by["bom_cable"]["value"] == "1 × 12 AWG, 10 m" and "there and back per cable" in by["bom_cable"]["note"] and by["bom_cable"]["group"] == "Bill of materials"
+    assert by["bom_lugs"]["value"] == "2 × L12-516" and by["bom_heat_shrink"]["value"] == "2 pieces of S12"
+    assert by["bom_fuse"]["value"].startswith("1 × 15 A")
+    assert any("there and back" in step for step in r["steps"])
+    # The loop length is what the formula sees: 10 m there and back = 5 m each way, the vectors' number.
+    assert by["cm_required"]["value"] == 4556.7
+
+
+def test_a_text_blank_is_answered_by_typing(client):
+    r = _run(client, stud_size="M10")
+    by = {x["key"]: x for x in r["results"]}
+    assert by["lug"]["value"] is None and "not M10" in by["lug"]["note"]
+    ask = next(a for a in r["asks"] if a["field"] == "fittings.lug.part")
+    assert ask["input_key"] == "own_lug_part" and ask["kind"] == "text" and ask["unit"] is None
+    assert by["bom_lugs"]["value"] == "2 lugs needed; part not chosen yet"
+    r2 = _run(client, stud_size="M10", own_lug_part="X-M10", own_crimp_die="DX")
+    by2 = {x["key"]: x for x in r2["results"]}
+    assert by2["lug"]["value"] == "X-M10 for a M10 stud" and by2["lug"]["note"] == "entered by you"
+    assert by2["crimp_die"]["value"] == "DX" and by2["bom_lugs"]["value"] == "2 × X-M10"
+    assert any("not checked against the stud" in w for w in r2["warnings"])
+    assert all(a["field"] != "fittings.lug.part" for a in r2["asks"])
+    # No stud at all: the ask points at the stud input itself.
+    r3 = _run(client, stud_size="")
+    ask3 = next(a for a in r3["asks"] if a["field"] == "fittings.lug.part")
+    assert ask3["input_key"] == "stud_size" and ask3["kind"] == "text"
+
+
+def test_catalog_tables_are_typed_not_imported(client, manual_doc):
+    s = client.get("/api/reference/e11").json()
+    assert {t["id"] for t in s["tables"]} >= {"cable_dimensions", "heat_shrink", "lugs"}
+    assert client.post("/api/reference/e11/tables/lugs/import", json={"document_id": manual_doc["id"], "page": 1}).status_code == 422
+    mine = {**_fixture("cable_dimensions"), "status": "confirmed", "source": {"document": "My cable catalog"}, "rows": [{"size_awg": "12", "outside_diameter": 0.2}], "diameter_unit": "in"}
+    saved = client.put("/api/reference/e11/tables/cable_dimensions", json=mine).json()
+    try:
+        assert saved["status"] == "confirmed" and saved["origin"] == "yours" and saved["source"].get("page") is None
+        by = {x["key"]: x for x in _run(client)["results"]}
+        assert by["cable_od"]["value"] == 0.2 and by["cable_od"]["unit"] == "in" and by["cable_od"]["note"] == "From My cable catalog"
+        assert by["heat_shrink"]["value"].startswith("S12")  # 0.2 in = 5.08 mm, the lug barrel is 7 mm
+    finally:
+        assert client.delete("/api/reference/e11/tables/cable_dimensions").status_code == 200
+
+
 def test_a_fuse_that_would_exceed_the_conductor_is_a_warning_not_a_number(client):
-    r = _run(client, system_voltage=48, current=30, length=1, max_drop_percent="10", load_type="motor")
+    r = _run(client, system_voltage=48, current=30, length=2, max_drop_percent="10", circuit_type="windlass")
     by = {x["key"]: x for x in r["results"]}
     assert by["fuse_a"]["value"] is None and "would exceed the conductor" in by["fuse_a"]["note"]
     assert any("Use a larger conductor" in w for w in r["warnings"])
@@ -117,7 +174,7 @@ def test_voltage_drop_gains_the_e11_rows_when_tables_are_confirmed(client):
 
 def test_reference_status_and_table_round_trip(client):
     s = client.get("/api/reference/e11").json()
-    assert s["installed"] and s["fixture"] and s["missing"] == [] and len(s["tables"]) == 8
+    assert s["installed"] and s["fixture"] and s["missing"] == [] and len(s["tables"]) == 11
     assert all(t["layout"]["title"] for t in s["tables"])
     t = client.get("/api/reference/e11/tables/constants").json()
     assert t["status"] == "fixture" and t["origin"] == "bundled"
@@ -162,7 +219,7 @@ def test_import_drafts_a_table_from_a_detected_table(client, manual_doc):
 
 def test_cheatsheet_round_trip(client):
     s = client.get("/api/reference/e11/cheatsheet").json()
-    assert len(s["entries"]) == 3 and s["markdown"].startswith("# Installation reminders") and s["origin"] == "bundled"
+    assert len(s["entries"]) == 4 and s["markdown"].startswith("# Installation reminders") and s["origin"] == "bundled"
     mine = {"source": {"document": "My E-11"}, "entries": [{"topic": "T", "rule": "R", "clause": "C", "page": 4, "applies_to": ["always"], "status": "confirmed"}]}
     saved = client.put("/api/reference/e11/cheatsheet", json=mine).json()
     try:

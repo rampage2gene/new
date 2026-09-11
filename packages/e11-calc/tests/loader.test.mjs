@@ -7,7 +7,7 @@ test("the fixture loads only when a test says so", () => {
   assert.throws(() => loadTables(fixtureFiles()), (e) => e instanceof TableError && /fixture/.test(e.message));
   const t = fixtureTables();
   assert.equal(t.fixture, true);
-  assert.equal(Object.keys(t.byId).length, 8);
+  assert.equal(Object.keys(t.byId).length, 11);
 });
 
 test("a table without a page is refused, naming the file and the field", () => {

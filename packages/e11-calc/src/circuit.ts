@@ -12,6 +12,8 @@
  */
 import type { Ask, CheatSheet, CircuitInputs, CircuitResult, E11Tables, OwnValues, Source } from "./schema.js";
 import { remindersFor } from "./cheatsheet.js";
+import { fittingsFor } from "./fittings.js";
+import { CIRCUIT_TYPES } from "./profiles.js";
 import { fuseForConductor, interruptingCheck } from "./protection.js";
 import {
   ampacityOf, bundlingFactor, circularMilsOf, compareSizes, isBlank, lengthFt, nearestMetric, parallelConductors,
@@ -25,7 +27,13 @@ export function sizeCircuit(inputs: CircuitInputs, tables: E11Tables, own: OwnVa
   const blanks: CircuitResult["blanks"] = [];
   const blank = (field: string, reason: string, ask?: Ask) => { blanks.push(ask ? { field, reason, ask } : { field, reason }); };
 
-  const lFt = lengthFt(inputs.length, inputs.length_unit);
+  // The length as typed is the whole loop or one way; the tables' own
+  // definition of L (round trip or one way, as each page words it) is applied
+  // downstream, so here it is brought to one way.
+  const loop = inputs.length_basis === "loop";
+  const oneWay = loop ? inputs.length / 2 : inputs.length;
+  const lFt = lengthFt(oneWay, inputs.length_unit);
+  if (loop) steps.push(`Length: ${inputs.length} ${inputs.length_unit} there and back, ${round(oneWay, 2)} ${inputs.length_unit} each way.`);
   const rating = inputs.insulation_rating_c;
   const bundled = Math.max(2, Math.floor(inputs.bundled_conductors || 2));
 
@@ -206,8 +214,15 @@ export function sizeCircuit(inputs: CircuitInputs, tables: E11Tables, own: OwnVa
       : `Interrupting capacity: ${ic.reason}`);
   }
 
-  // 7. Reminders that apply.
+  // 7. The fittings for that conductor, from the owner's catalog tables.
+  const loopLength = loop ? inputs.length : 2 * inputs.length;
+  const fit = fittingsFor({ size_awg: size, parallel, stud: inputs.stud_size, loop_length: loopLength, length_unit: inputs.length_unit }, tables, own);
+  blanks.push(...fit.blanks);
+  steps.push(...fit.steps);
+
+  // 8. Reminders that apply.
   const tags = ["dc", inputs.load_type];
+  if (inputs.circuit_type) tags.push(inputs.circuit_type, ...(CIRCUIT_TYPES[inputs.circuit_type]?.tags ?? []));
   if (inputs.engine_space) tags.push("engine_space");
   if (bundled >= 3) tags.push("bundled");
   if (parallel > 1) tags.push("parallel");
@@ -222,6 +237,7 @@ export function sizeCircuit(inputs: CircuitInputs, tables: E11Tables, own: OwnVa
       drop_at_size: { volts: dropV, percent: dropPct, ...(dropReason ? { reason: dropReason } : {}) },
     },
     protection,
+    fittings: fit.fittings,
     reminders,
     blanks,
     steps,

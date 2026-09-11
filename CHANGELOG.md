@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.2.1 - 2026-09-11
+
+The circuit calculator plans the whole cable run: the length is typed as
+you measure it, there and back; you say what the circuit feeds; and the
+result goes on past the conductor to the fittings for each cable and a
+bill of materials. The fittings come from your own catalogs, never from a
+typical list: a wrong tubing size or lug is a fault on a boat.
+
+- Changed: **the length is the whole run, there and back**, typed once.
+  The calculation shows the halving and says whether the page's formula
+  counts the loop or one way.
+- Added: **What the circuit feeds** (battery to main switch, inverter,
+  charger, alternator, DC-DC, solar, windlass or thruster, engine starter,
+  bilge pump, lights, electronics, other). It sets how the load behaves for
+  the fuse and which of your reminders come along - so the fuse positions
+  and the specialty fuses for that kind of circuit show when you have
+  written those rules from your pages, tagged with the circuit's name.
+- Added: **Fittings** for the chosen cable: its outside diameter, the heat
+  shrink that slides over the cable and its lug and shrinks below the
+  cable, the lug for the stud you name, and the crimp die. These come from
+  three new tables under ABYC E-11 reference - cable outside diameters,
+  heat-shrink sizes, lugs and dies - that you type from your cable, tubing
+  and lug catalogs (in millimetres or inches). A missing row is a blank
+  with a box, like every other blank: type the catalog name or the number
+  and it is marked as yours.
+- Added: **Bill of materials** for the set: cable to buy (cables times the
+  loop length, no allowance added), lugs, heat-shrink pieces, the fuse.
+- Fixed: the library tests pass on Windows (line endings).
+
 ## v0.2.0 - 2026-09-11
 
 A circuit calculator built on your own copy of ABYC E-11, and the same

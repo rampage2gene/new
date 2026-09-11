@@ -70,7 +70,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 const ACT = {
   // A circuit the synthetic tables can size, with the short-circuit current
-  // left out on purpose: the result then carries a blank with its ask box.
+  // and the stud left out on purpose: the result then carries blanks with
+  // their ask boxes, one numeric and one text.
   "calculator-circuit": async (page) => {
     const fill = async (label, value) => {
       const box = page.locator("label.field", { hasText: label }).first().locator("input, select").first();
@@ -80,7 +81,7 @@ const ACT = {
     };
     await fill("System voltage", 12);
     await fill("Circuit current", 30);
-    await fill("One-way length", 5);
+    await fill("Total length of the run", 10);
     await page.getByRole("button", { name: "Calculate", exact: true }).click().catch(() => {});
     await page.locator(".calc-result").waitFor({ timeout: 15000 }).catch(() => {});
     await page.locator(".calc-result").scrollIntoViewIfNeeded().catch(() => {});

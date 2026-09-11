@@ -159,7 +159,7 @@ docker run -p 8000:8000 -v mdi-data:/data -e MDI_ANTHROPIC_API_KEY=sk-ant-... ma
 | `POST /api/ask` | Cited question answering (`document_ids`, optional `history`) |
 | `POST /api/compare` | Cross-document comparison, conflicts, optional question |
 | `POST /api/documents/{id}/pages/{n}/diagram` | Diagram analysis with confidence tiers |
-| `GET /api/calculators`, `POST /api/calculators/{id}/run`, `GET /api/calculators/{id}/suggest` | Calculator specs, execution, document-to-calculator suggestions; `circuit_e11` sizes a circuit from the owner's E-11 tables and asks for what they do not cover |
+| `GET /api/calculators`, `POST /api/calculators/{id}/run`, `GET /api/calculators/{id}/suggest` | Calculator specs, execution, document-to-calculator suggestions; `circuit_e11` sizes a circuit from the owner's E-11 tables (length there and back, what the circuit feeds, the fittings for each cable from the owner's catalogs, a bill of materials) and asks for what they do not cover |
 | `GET /api/reference/e11`, `PUT /api/reference/e11/tables/{id}`, `POST …/tables/{id}/import`, `GET /api/reference/e11/download` | The owner's ABYC E-11 reference: tables imported from a page, corrected, confirmed, and downloaded for the `e11-calc` library |
 | `GET /api/invoices`, `GET /api/export/invoices`, `GET /api/export/entities` | Invoice data and CSV/XLSX/JSON exports |
 | `GET /api/export/workbook`, `POST /api/calculators/{id}/export` | Excel workbooks with live formulas |

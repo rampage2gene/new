@@ -24,7 +24,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import Document
 from ..reference import e11_cheatsheet, e11_tables
-from ..reference.e11_tables import KIND_OF, TABLE_IDS, TableError
+from ..reference.e11_tables import CATALOG_KINDS, KIND_OF, TABLE_IDS, TableError
 
 router = APIRouter(prefix="/api/reference/e11", tags=["reference"])
 
@@ -40,6 +40,11 @@ LAYOUTS: dict[str, dict] = {
     "voltage_drop_3pct": {"title": "Conductor sizes for a 3 % drop (rows: current; columns: length)"},
     "voltage_drop_10pct": {"title": "Conductor sizes for a 10 % drop (rows: current; columns: length)"},
     "fuse_classes": {"title": "Fuse classes and their interrupting ratings, from the makers' datasheets", "columns": ["class", "interrupting_rating_a", "voltage_rating_v", "suits"]},
+    # The three catalog tables feed the Fittings group of the circuit
+    # calculator. They are typed from the makers' catalogs, never imported.
+    "cable_dimensions": {"title": "Cable outside diameter by size, from the cable maker's catalog", "columns": ["size_awg", "outside_diameter"]},
+    "heat_shrink": {"title": "Heat-shrink tubing sizes (inside diameter as supplied and after shrinking), from the tubing maker's catalog", "columns": ["size", "supplied_id", "recovered_id", "adhesive"]},
+    "lugs": {"title": "Lugs by cable size and stud, with the crimp die, from the lug maker's catalog", "columns": ["size_awg", "stud", "part", "barrel_od", "crimp_die"]},
 }
 
 
@@ -125,6 +130,8 @@ def _draft_from_rows(table_id: str, rows: list[list[str]], page: int, doc: Docum
     person to type. Nothing is corrected or guessed here: a cell that does
     not read as the number or size the layout expects stays empty."""
     kind = KIND_OF[table_id]
+    if kind in CATALOG_KINDS:
+        raise HTTPException(422, "This table is typed from the makers' datasheets or catalogs, not imported from a page of the standard.")
     header = [c.strip() for c in (rows[0] if rows else [])]
     body = rows[1:] if len(rows) > 1 else []
     source = {"document": doc.title or doc.filename, "table": header[0] if header else "", "page": page, "document_id": doc.id}
@@ -191,7 +198,7 @@ def _draft_from_rows(table_id: str, rows: list[list[str]], page: int, doc: Docum
         return {**base, "nominal_voltage": 12, "drop_percent": pct, "length_unit": "ft", "length_definition": "round_trip", "lengths": lengths, "rows": out_rows, "edits": edits}
     if kind == "constants":
         return {**base, "values": {"K_copper": {"value": 0, "page": page}}, "formula_as_printed": " ".join(header), "length_definition": "round_trip", "edits": {"K_copper/value": "needed", "length_definition": "check"}}
-    raise HTTPException(422, "Fuse classes are typed from the makers' datasheets, not imported from a page.")
+    raise HTTPException(422, "This table is typed from the makers' datasheets or catalogs, not imported from a page of the standard.")
 
 
 @router.post("/tables/{table_id}/import")
@@ -202,6 +209,8 @@ def import_table(table_id: str, req: ImportRequest, db: Session = Depends(get_db
     saved as the person's copy, unusable until they confirm it."""
     if table_id not in TABLE_IDS:
         raise HTTPException(404, f"No table called {table_id}")
+    if KIND_OF[table_id] in CATALOG_KINDS:
+        raise HTTPException(422, "This table is typed from the makers' datasheets or catalogs, not imported from a page of the standard.")
     doc = db.get(Document, req.document_id)
     if not doc:
         raise HTTPException(404, "Document not found")

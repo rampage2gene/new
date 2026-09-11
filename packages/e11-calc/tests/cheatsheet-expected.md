@@ -19,3 +19,9 @@ Every rule names the clause and page of the owner's own copy; a rule marked *dra
 | Rule | Clause | Page |
 |---|---|---|
 | Fixture rule C: derate conductors in engine spaces. | F.3 | p. 3 |
+
+## Inverters
+
+| Rule | Clause | Page |
+|---|---|---|
+| Fixture rule D: an inverter feed carries a fuse of the class its bank needs. | F.4 | p. 4 |

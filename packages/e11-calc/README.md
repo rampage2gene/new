@@ -79,8 +79,20 @@ In Node, `import { loadTablesFromDir } from "e11-calc/node"` reads a folder.
    conductor's derated ampacity. The interrupting rating of the fuse must
    exceed the source's short-circuit current, which you type from the
    battery datasheet; the fuse classes you have entered are listed.
-5. **Reminders.** Cheat-sheet entries whose tags fit the situation
-   (`always`, `engine_space`, `bundled`, `parallel`, the load type).
+5. **Fittings.** From three catalog tables you type (`cable_dimensions`,
+   `heat_shrink`, `lugs`; not E-11): the cable's outside diameter, the
+   smallest tubing that slides over the cable and its lug barrel and shrinks
+   below the cable (adhesive-lined preferred), the lug for the stud you name
+   (`stud_size`) with its crimp die, and the counts for the set. Nothing
+   typical is carried here; a missing row is a blank with a text or number
+   ask (`own.cable_od_mm`, `own.heat_shrink_size`, `own.lug_part`,
+   `own.crimp_die`, `own.stud`).
+6. **Reminders.** Cheat-sheet entries whose tags fit the situation
+   (`always`, `engine_space`, `bundled`, `parallel`, the load type, and the
+   `circuit_type` you pass with the tags `CIRCUIT_TYPES` gives it).
+
+`length` is one way unless `length_basis: "loop"` says it is the whole run,
+there and back; each table's own definition of L is applied after that.
 
 ## Files
 

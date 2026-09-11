@@ -6,8 +6,8 @@ import { FIXTURE_SHEET, FIXTURE_TABLES, HERE } from "./helpers.mjs";
 
 test("the directory reader loads every *.json as a table", () => {
   const t = loadTablesFromDir(FIXTURE_TABLES, { allowFixture: true });
-  assert.equal(Object.keys(t.byId).length, 8);
-  assert.equal(loadCheatSheetFromFile(FIXTURE_SHEET).entries.length, 3);
+  assert.equal(Object.keys(t.byId).length, 11);
+  assert.equal(loadCheatSheetFromFile(FIXTURE_SHEET).entries.length, 4);
 });
 
 test("a missing folder is an empty set, not an error", () => {

@@ -97,6 +97,17 @@ def test_loader_refuses_what_could_pass_a_guess_off_as_the_standard():
     fc = files["fuse_classes.json"]
     with pytest.raises(TableError, match=r"fuse class Z needs source\.document and source\.page"):
         load_tables({"f.json": {**fc, "rows": [{"class": "Z", "interrupting_rating_a": 100, "suits": []}]}}, allow_fixture=True)
+    hs = files["heat_shrink.json"]
+    with pytest.raises(TableError, match="heat shrink S9: recovered_id must be above zero and below supplied_id"):
+        load_tables({"h.json": {**hs, "rows": [{"size": "S9", "supplied_id": 3, "recovered_id": 3}]}}, allow_fixture=True)
+    with pytest.raises(TableError, match='cable_dimensions needs diameter_unit "mm" or "in"'):
+        load_tables({"c.json": {**files["cable_dimensions.json"], "diameter_unit": "cm"}}, allow_fixture=True)
+    with pytest.raises(TableError, match="every lugs row needs size_awg, stud and part"):
+        load_tables({"l.json": {**files["lugs.json"], "rows": [{"size_awg": "12", "stud": "M8"}]}}, allow_fixture=True)
+    # A catalog table needs its source document but no page of the standard.
+    load_tables({"l.json": {**files["lugs.json"], "source": {"document": "a lug catalog"}}}, allow_fixture=True)
+    with pytest.raises(TableError, match="has no source.document"):
+        load_tables({"l.json": {**files["lugs.json"], "source": {}}}, allow_fixture=True)
     with pytest.raises(TableError, match='unknown table id "mystery"'):
         load_tables({"x.json": {**files["constants.json"], "id": "mystery"}}, allow_fixture=True)
     draft = {**files["constants.json"], "status": "draft"}
@@ -149,6 +160,51 @@ def test_python_profiles_equal_the_shared_contract():
     assert DEVICE_PROFILES == contract["device_profiles"]
     assert T.STANDARD_FUSE_SIZES == contract["standard_fuse_sizes_a"]
     assert T.STANDARD_BREAKER_SIZES == contract["standard_breaker_sizes_a"]
+    from app.calculators.modules import CIRCUIT_TYPES
+
+    assert CIRCUIT_TYPES == contract["circuit_types"]
+    for c in CIRCUIT_TYPES.values():
+        assert c["load_type"] in DEVICE_PROFILES, c["label"]
+
+
+def test_fittings_helpers_match_the_library():
+    from app.reference.e11_fittings import cable_outside_diameter, heat_shrink_for, lug_for, normalize_stud, to_mm
+    from app.reference.e11_tables import load_tables
+
+    for s in ['5/16"', " 5/16 ", "5/16 in", "5/16in"]:
+        assert normalize_stud(s) == "5/16"
+    assert normalize_stud("M8") == "m8" and normalize_stud(None) == ""
+    assert to_mm(1, "in") == 25.4
+    files = fixture_files()
+    inches = {**files["cable_dimensions.json"], "diameter_unit": "in", "rows": [{"size_awg": "12", "outside_diameter": 0.25}]}
+    t = load_tables({**files, "cable_dimensions.json": inches}, allow_fixture=True)
+    od = cable_outside_diameter("12", t)
+    assert (od["value"], od["unit"], od["mm"], od["source"]["document"]) == (0.25, "in", 6.35, inches["source"]["document"])
+    t = fixture_tables()
+    assert heat_shrink_for(2, None, t)["size"] == "S3"
+    assert heat_shrink_for(2, 5, t)["size"] == "S6"
+    none = heat_shrink_for(0.5, None, t)
+    assert none["value"] is None and "shrinks below" in none["reason"] and none["ask"]["kind"] == "text"
+    lug = lug_for("12", '5/16"', t)
+    assert (lug["part"], lug["crimp_die"], lug["barrel_od_mm"]) == ("L12-516", "D12", 7)
+    no_die = lug_for("12", "M8", t)
+    assert no_die["crimp_die"] is None and no_die["die_ask"]["field"] == "own.crimp_die"
+    own_die = lug_for("12", "M8", t, {"crimp_die": "DX"})
+    assert (own_die["crimp_die"], own_die["die_source"]) == ("DX", {"by": "you"})
+    assert "no 10 AWG row" in lug_for("10", "5/16", t)["reason"]
+
+
+def test_a_page_that_defines_l_one_way_takes_half_the_loop():
+    from app.reference.e11_circuit import size_circuit
+    from app.reference.e11_tables import load_tables
+
+    files = fixture_files()
+    t = load_tables({**files, "constants.json": {**files["constants.json"], "length_definition": "one_way"}}, allow_fixture=True)
+    base = {**VECTORS["defaults"]}
+    loop = size_circuit({**base, "length": 10, "length_basis": "loop"}, t)
+    one = size_circuit({**base, "length": 5}, t)
+    assert loop["conductor"]["voltage_drop"]["cm_required"] == one["conductor"]["voltage_drop"]["cm_required"] == 2278.4
+    assert "there and back" in loop["steps"][0]
 
 
 def test_real_tables_load_when_present():

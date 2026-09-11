@@ -20,6 +20,10 @@ const ASK_FOR_ROW: Record<string, string> = {
   size_awg: "conductor.size_awg",
   fuse_a: "protection.fuse_a",
   interrupting: "protection.interrupting.required_a",
+  cable_od: "fittings.cable_od",
+  heat_shrink: "fittings.heat_shrink.size",
+  lug: "fittings.lug.part",
+  crimp_die: "fittings.lug.crimp_die",
 };
 
 function SourceTag({ src }: { src: CalcInputValue["source"] }) {
@@ -269,11 +273,13 @@ export default function CalculatorsPage() {
                           {r.note && <div className="small">{r.note}</div>}
                           {ask?.input_key && (
                             <div className="row" style={{ flexWrap: "nowrap", marginTop: 4 }}>
-                              <input type="number" step="any" value={answers[ask.field] ?? ""} placeholder={ask.unit ? `value in ${ask.unit}` : "value from the page"} aria-label={ask.prompt} onChange={(e) => setAnswers((a) => ({ ...a, [ask.field]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); answer(ask); } }} style={{ width: 150 }} />
+                              <input type={ask.kind === "text" ? "text" : "number"} step="any" value={answers[ask.field] ?? ""} placeholder={ask.unit ? `value in ${ask.unit}` : ask.kind === "text" ? "catalog name" : "value from the page"} aria-label={ask.prompt} onChange={(e) => setAnswers((a) => ({ ...a, [ask.field]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); answer(ask); } }} style={{ width: 150 }} />
                               <button className="btn primary" disabled={busy || !answers[ask.field]?.trim()} onClick={() => answer(ask)}>Use this value</button>
                             </div>
                           )}
                           {ask && !ask.input_key && <div className="small" style={{ marginTop: 4 }}><Link to={`/calculators/${REFERENCE_ID}`}>Open the ABYC E-11 reference</Link></div>}
+                          {ask?.input_key && ask.field.startsWith("fittings.") && ask.field !== "fittings.lug.part" && <div className="small muted" style={{ marginTop: 4 }}>Or type the whole table once under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
+                          {ask?.input_key === "own_lug_part" && <div className="small muted" style={{ marginTop: 4 }}>Or add the row to your lugs table under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
                         </div>
                       ) : (
                         <div><span className={typeof r.value === "number" ? "result-value" : ""}>{typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span> {r.unit && <b>{r.unit}</b>} <span className="muted">{typeof r.value === "number" ? r.label : `— ${r.label}`}</span></div>
@@ -298,7 +304,7 @@ export default function CalculatorsPage() {
               <table className="small">
                 <tbody>
                   {Object.entries(result.inputs).filter(([, v]) => v.value != null && v.value !== "").map(([k, v]) => (
-                    <tr key={k}><td className="muted">{spec?.inputs.find((i) => i.key === k)?.label || k}</td><td><b>{String(v.value)}</b> {v.unit}</td><td>{v.source ? <SourceTag src={v.source} /> : <span className="muted">{v.origin === "default" ? "default" : spec?.inputs.find((i) => i.key === k)?.answers ? "typed by you" : "entered by user"}</span>}</td></tr>
+                    <tr key={k}><td className="muted">{spec?.inputs.find((i) => i.key === k)?.label || k}</td><td><b>{spec?.inputs.find((i) => i.key === k)?.options?.find((o) => o.value === String(v.value))?.label ?? String(v.value)}</b> {v.unit}</td><td>{v.source ? <SourceTag src={v.source} /> : <span className="muted">{v.origin === "default" ? "default" : spec?.inputs.find((i) => i.key === k)?.answers ? "typed by you" : "entered by user"}</span>}</td></tr>
                   ))}
                 </tbody>
               </table>
