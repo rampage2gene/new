@@ -32,7 +32,7 @@ this — not for speed, not for a tidier screen, not for a shorter flow.
 
 ## Working here
 
-- **Tests:** `cd backend && python -m pytest` (175 tests, one skipped until
+- **Tests:** `cd backend && python -m pytest` (181 tests, one skipped until
   the owner's tables exist) and `cd packages/e11-calc && npm test` (58). They
   must pass before a commit.
 - **UI build:** `cd frontend && npm run build`.

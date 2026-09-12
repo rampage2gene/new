@@ -111,11 +111,18 @@ class CalcResult:
 
 
 class Calculator:
-    spec: CalculatorSpec
-
-    def __init__(self, spec: CalculatorSpec, fn: Callable[[dict[str, InputValue]], CalcResult]):
-        self.spec = spec
+    def __init__(self, spec: CalculatorSpec, fn: Callable[[dict[str, InputValue]], CalcResult], resolve: Callable[[CalculatorSpec], CalculatorSpec] | None = None):
+        self._spec = spec
         self._fn = fn
+        # Some inputs offer choices that only exist once the person has
+        # confirmed a reference table (the bundle sizes on their page). A
+        # resolver rebuilds those options each time the spec is read, so the
+        # API, the workbook and the run all see the choices that exist now.
+        self._resolve = resolve
+
+    @property
+    def spec(self) -> CalculatorSpec:
+        return self._resolve(self._spec) if self._resolve else self._spec
 
     def run(self, raw_inputs: dict[str, Any]) -> CalcResult:
         inputs = coerce_inputs(self.spec, raw_inputs)

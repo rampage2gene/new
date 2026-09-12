@@ -184,6 +184,9 @@ export interface ReferenceStatus { installed: boolean; confirmed: string[]; miss
 /** One table file; the shape depends on `kind` (see packages/e11-calc/schema). */
 export interface ReferenceTable { id: ReferenceTableId; kind: string; title?: string; status: "missing" | "draft" | "confirmed" | "fixture"; source?: { document: string; edition?: string; table?: string; page?: number; document_id?: string }; edits?: Record<string, string>; origin?: string | null; layout: { title: string; columns?: string[] }; [key: string]: any }
 export interface DetectedTable { page: number; table_index: number; header: string[]; rows: number; section?: string | null }
+/** What "Copy every table from this document" managed: each table of the
+ *  standard is either copied as a draft, left as it was, or reported. */
+export interface ImportAllReport { copied: { id: ReferenceTableId; page: number }[]; not_found: ReferenceTableId[]; ambiguous: { id: ReferenceTableId; pages: number[] }[]; kept: ReferenceTableId[]; unfit: { id: ReferenceTableId; page: number; reason: string }[] }
 export interface CheatSheetResponse { source: { document: string; edition?: string } | null; entries: CheatSheetEntry[]; markdown: string; origin: string | null }
 
 export interface DiagramComponent { id: string; type: string; label: string; rating?: string | null; confidence: "confirmed" | "high" | "possible" | "unknown"; bbox_pct?: number[] | null }

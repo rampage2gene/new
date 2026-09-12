@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import type { CheatSheetEntry, DetectedTable, DocumentSummary, ReferenceStatus, ReferenceTable, ReferenceTableId, ReferenceTableRow } from "../types";
+import type { CheatSheetEntry, DetectedTable, DocumentSummary, ImportAllReport, ReferenceStatus, ReferenceTable, ReferenceTableId, ReferenceTableRow } from "../types";
 
 /** The owner's ABYC E-11 reference: the tables the circuit calculator
  *  computes with, and the installation reminders.
@@ -44,10 +44,18 @@ export default function ReferencePane() {
       {status.fixture && <div className="alert warn">These are the synthetic test tables, with made-up numbers. Import your own from the standard before relying on a result.</div>}
       {!status.installed && (
         <div className="empty">
-          No E-11 tables yet. Open the document that holds the standard, then use <b>Import from a document</b> on each table below: the app copies the cells it can read from the page and leaves the rest for you to type. Your tables are saved in <span className="mono">{status.folders.yours}</span>.
+          No E-11 tables yet. Add your copy of the standard to the library, then choose it below and press <b>Copy every table from this document</b>: the app copies the cells it can read and leaves the rest for you to type and confirm, table by table. One table at a time still works too, with <b>Import from a document</b> inside each table. Your tables are saved in <span className="mono">{status.folders.yours}</span>.
         </div>
       )}
       <p className="small" style={{ margin: "6px 0" }}><b>{done} of {status.tables.length}</b> tables confirmed{done < status.tables.length ? `; ${status.tables.length - done} still to import, check or confirm` : "."}</p>
+      <ImportAllRow
+        titles={Object.fromEntries(status.tables.map((t) => [t.id, t.layout.title]))}
+        /* The one action that matters most here: copying, while there is
+           nothing yet; confirming the open table, once there is. */
+        first={!status.installed}
+        onBefore={() => { if (!leaveOk()) return false; setOpen(null); setSheetOpen(false); return true; }}
+        onDone={load}
+      />
       <div className="table-scroll">
         <table>
           <thead><tr><th>Table</th><th className="hide-sm">Page</th><th>Status</th><th></th></tr></thead>
@@ -69,6 +77,94 @@ export default function ReferencePane() {
       </div>
       {open && <TableEditor id={open} onChanged={load} onClose={() => { if (leaveOk()) setOpen(null); }} onDirty={(title) => { unsaved.current = title; }} onOpenPage={(docId, page) => navigate(`/documents/${docId}?page=${page}`)} />}
       {sheetOpen && <CheatSheetEditor onChanged={load} />}
+    </div>
+  );
+}
+
+// ------------------------------------------ every table from one document
+
+/** One press copies every table of the standard the app can find in a
+ *  document, as drafts for the person to check against the page. Nothing is
+ *  confirmed and nothing already saved here is touched; what the app could
+ *  not find, or found twice, is said plainly so the person knows what is
+ *  left to do. */
+function ImportAllRow({ titles, first, onBefore, onDone }: { titles: Record<string, string>; first: boolean; onBefore: () => boolean; onDone: () => void }) {
+  const [docs, setDocs] = useState<DocumentSummary[]>([]);
+  const [docId, setDocId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<ImportAllReport | null>(null);
+
+  useEffect(() => { api.listDocuments().then((d) => setDocs(d.filter((x) => x.status === "ready"))).catch(() => {}); }, []);
+
+  const run = async () => {
+    if (!docId || !onBefore()) return;
+    setBusy(true); setError(null); setReport(null);
+    try { setReport(await api.importAllReferenceTables(docId)); onDone(); }
+    catch (e: any) { setError(e?.message ?? String(e)); }
+    finally { setBusy(false); }
+  };
+
+  // The report reads as sentences, so the layout hint a title carries in
+  // brackets ("(rows: current; columns: length)") is left to the table's own
+  // row, where it belongs.
+  const name = (id: string) => (titles[id] ?? id).replace(/\s*\([^)]*\)\s*$/, "");
+  const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : xs[0] ?? "");
+  const nothingLeft = report && !report.not_found.length && !report.ambiguous.length && !report.unfit.length;
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="row">
+        <label className="field" style={{ margin: 0, minWidth: 220 }}>
+          <span className="lbl">Your copy of the standard</span>
+          <select value={docId} onChange={(e) => { setDocId(e.target.value); setReport(null); setError(null); }}>
+            <option value="">{docs.length ? "— choose the document —" : "no documents are ready yet"}</option>
+            {docs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
+          </select>
+        </label>
+        <button className={first ? "btn primary" : "btn"} disabled={busy || !docId} onClick={run}>{busy ? <><span className="spinner" /> Copying…</> : "Copy every table from this document"}</button>
+      </div>
+      {error && <div className="alert crit" style={{ marginTop: 8 }}>{error} Try again; if it keeps failing, open Diagnostics in the sidebar.</div>}
+      {report && (
+        /* Green only when nothing is left to do: a copy that left two tables
+           for the person to sort out is not a success to be read past. */
+        <div className={nothingLeft ? "alert ok" : "alert warn"} style={{ marginTop: 8 }}>
+          {report.copied.length > 0 ? (
+            <p style={{ margin: 0 }}>
+              Copied {report.copied.length} table{report.copied.length === 1 ? "" : "s"} as draft{report.copied.length === 1 ? "" : "s"}: {list(report.copied.map((c) => `${name(c.id)} (p. ${c.page})`))}. Open each one below, check it against its page, type the cells left blank, then press Confirm.
+            </p>
+          ) : (
+            <p style={{ margin: 0 }}>Nothing new was copied from this document.</p>
+          )}
+          {report.ambiguous.map((a) => (
+            <p className="small" key={a.id} style={{ margin: "6px 0 0" }}>
+              {a.pages.length} tables look like {name(a.id)} (pages {list(a.pages.map(String))}): open it below and choose the page yourself.
+            </p>
+          ))}
+          {report.unfit.map((u) => (
+            <p className="small" key={u.id} style={{ margin: "6px 0 0" }}>
+              Page {u.page} looks like {name(u.id)} but could not be read as that table ({u.reason}): open it below and copy that page by hand.
+            </p>
+          ))}
+          {report.not_found.filter((id) => id !== "constants").length > 0 && (
+            <p className="small" style={{ margin: "6px 0 0" }}>
+              Not found in this document: {list(report.not_found.filter((id) => id !== "constants").map(name))}. If the standard is split across more than one document, try the others too.
+            </p>
+          )}
+          {/* Not a fact about this document: K and the formula are printed as
+              a sentence on the page, so no copy of the standard can be read
+              for them. Saying it with the "not found" list would send the
+              person looking through other documents for nothing. */}
+          {report.not_found.includes("constants") && (
+            <p className="small" style={{ margin: "6px 0 0" }}>
+              K and the formula are printed as text, not as a table, so they are never copied this way: open the formula constants below and type K from the page.
+            </p>
+          )}
+          {report.kept.length > 0 && (
+            <p className="small" style={{ margin: "6px 0 0" }}>Left as they are, because you already have them: {list(report.kept.map(name))}.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

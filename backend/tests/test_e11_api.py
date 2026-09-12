@@ -17,7 +17,7 @@ def _fixture(name: str) -> dict:
 
 
 # The length is the whole loop (10 m there and back = the vectors' 5 m one way); the stud is given so the fixture lugs table answers.
-BASE = {"system_voltage": 24, "current": 10, "length": 10, "length_unit": "m", "max_drop_percent": "3", "insulation_rating_c": 105, "engine_space": "no", "bundled": "no", "circuit_type": "general_dc", "stud_size": "5/16"}
+BASE = {"system_voltage": 24, "current": 10, "length": 10, "length_unit": "m", "max_drop_percent": "3", "insulation_rating_c": 105, "engine_space": "no", "bundle": "2", "circuit_type": "general_dc", "stud_size": "5/16"}
 
 
 def _run(client, **inputs) -> dict:
@@ -38,12 +38,58 @@ def test_circuit_calculator_is_registered_with_answer_inputs(client):
     assert "there and back" in length["label"]
     assert [o["value"] for o in next(i for i in spec["inputs"] if i["key"] == "circuit_type")["options"]][:2] == ["battery_main", "inverter"]
     assert "entity" not in spec["description"].lower()
+    assert [o["value"] for o in next(i for i in spec["inputs"] if i["key"] == "size_unit")["options"]] == ["awg", "mm2"]
+
+
+def test_the_bundle_is_picked_from_the_confirmed_table(client):
+    def options():
+        spec = next(s for s in client.get("/api/calculators").json() if s["id"] == "circuit_e11")
+        return next(i for i in spec["inputs"] if i["key"] == "bundle")["options"]
+
+    opts = options()
+    assert [o["value"] for o in opts] == ["2", "3", "7"]
+    assert opts[1]["label"] == "3 to 6 conductors bundled (× 0.5, page 3, test data)"  # the fixture says so where the choice is made
+    r = _run(client, bundle="7")
+    assert "bundling factor 0.25" in {x["key"]: x for x in r["results"]}["ampacity_size"]["note"]
+    # Without a confirmed table the count is typed, and the factor asked for.
+    draft = {**_fixture("bundling_factors"), "status": "draft"}
+    client.put("/api/reference/e11/tables/bundling_factors", json=draft)
+    try:
+        assert [o["value"] for o in options()] == ["2", "count"]
+        assert client.post("/api/calculators/circuit_e11/run", json={"inputs": {**BASE, "bundle": "count"}}).status_code == 422
+        r = _run(client, bundle="count", bundled_conductors=4)
+        assert any(a["input_key"] == "own_bundling_factor" for a in r["asks"])
+        r = _run(client, bundle="count", bundled_conductors=4, own_bundling_factor=0.5)
+        assert "factor entered by you" in {x["key"]: x for x in r["results"]}["ampacity_size"]["note"]
+    finally:
+        client.delete("/api/reference/e11/tables/bundling_factors")
+
+
+def test_sizes_can_be_shown_in_mm2(client):
+    r = _run(client, size_unit="mm2")
+    by = {x["key"]: x for x in r["results"]}
+    assert by["size_awg"]["value"] == "6 mm² (12 AWG)" and by["size_awg"]["label"] == "Cable size to use"
+    assert by["size_mm2"]["value"] == 4.05 and "12 AWG is 4.05 mm²" in by["size_mm2"]["note"]
+    assert by["bom_cable"]["value"] == "1 × 6 mm² (12 AWG), 10 m"
+    r = _run(client, size_unit="mm2", current=100, length=4, max_drop_percent="10", circuit_type="battery_main", short_circuit_a=5000)
+    by = {x["key"]: x for x in r["results"]}
+    assert by["size_awg"]["value"] == "2 × 6 mm² in parallel (2 × 12 AWG)" and "No single listed size" in by["size_awg"]["note"]
+
+
+def test_the_note_says_when_the_printed_table_or_the_formula_decided(client):
+    r = _run(client, system_voltage=12, current=5, length=20, length_unit="ft")
+    assert "asks for this size, more than the formula's 14 AWG" in {x["key"]: x for x in r["results"]}["size_awg"]["note"]
+    r = _run(client, system_voltage=12, current=25, length=10, length_unit="ft")
+    note = {x["key"]: x for x in r["results"]}["size_awg"]["note"]
+    assert note.startswith("The printed 3 % table on page 4 stops at 20 A, so the circular-mils formula")
 
 
 def test_circuit_result_cites_pages_and_groups_results(client):
     r = _run(client)
     by = {x["key"]: x for x in r["results"]}
-    assert by["size_awg"]["value"] == "12 AWG" and by["size_awg"]["group"] == "Conductor"
+    assert by["size_awg"]["value"] == "12 AWG" and by["size_awg"]["group"] == "Cable size"
+    assert "Set by the voltage-drop limit" in by["size_awg"]["note"] and "18 AWG would" in by["size_awg"]["note"]
+    assert by["cm_required"]["group"] == "How it was decided"
     assert by["cm_required"]["value"] == 4556.7 and "page 1" in by["cm_required"]["note"]
     assert by["ampacity_size"]["value"] == "18 AWG" and "page 2" in by["ampacity_size"]["note"]
     assert by["fuse_a"]["value"] == 15 and by["fuse_a"]["group"] == "Protection"
@@ -133,7 +179,7 @@ def test_a_fuse_that_would_exceed_the_conductor_is_a_warning_not_a_number(client
 
 
 def test_other_drop_limit_and_bundling(client):
-    r = _run(client, max_drop_percent="other", max_drop_other=5, bundled="yes", bundled_conductors=4)
+    r = _run(client, max_drop_percent="other", max_drop_other=5, bundle="3")
     by = {x["key"]: x for x in r["results"]}
     assert by["printed_table_size"]["value"] is None and "5 % limit" in by["printed_table_size"]["note"]
     assert "bundling factor 0.5" in by["ampacity_size"]["note"]
@@ -215,6 +261,83 @@ def test_import_drafts_a_table_from_a_detected_table(client, manual_doc):
         client.delete("/api/reference/e11/tables/circular_mils")
     assert client.post("/api/reference/e11/tables/circular_mils/import", json={"document_id": manual_doc["id"], "page": 999}).status_code == 404
     assert client.post("/api/reference/e11/tables/fuse_classes/import", json={"document_id": manual_doc["id"], "page": first["page"]}).status_code == 422
+
+
+def test_the_matcher_reads_the_words_printed_on_the_page():
+    """Which detected table is which table of the standard is decided by the
+    words on the page, and only when they are unambiguous."""
+    from app.api.reference import match_detected_tables
+
+    def t(page, *header, section=None):
+        return {"page": page, "table_index": 0, "rows": [list(header)], "section": section}
+
+    m = match_detected_tables([
+        t(12, "Conductor size", "Circular mils", "mm2"),
+        t(14, "Size", "60 C", "75 C", section="Allowable amperage of conductors inside engine spaces"),
+        t(15, "Size", "60 C", "75 C", section="Allowable amperage of conductors inside engine spaces"),
+        t(16, "Number of conductors bundled", "Correction factor"),
+        t(18, "Amperes", "10", "15", section="Conductor sizes for a 13 % drop"),
+        t(20, "Parameter", "Value"),
+        t(22, "Size", "Correction factor for temperature"),
+    ])
+    assert [c["page"] for c in m["circular_mils"]] == [12]
+    # Two pages of the same table: a question for the person, not a choice.
+    assert [c["page"] for c in m["ampacity_inside_engine_space"]] == [14, 15]
+    assert m["ampacity_outside_engine_space"] == []
+    assert [c["page"] for c in m["bundling_factors"]] == [16]
+    assert m["voltage_drop_3pct"] == [] and m["voltage_drop_10pct"] == []
+    assert m["constants"] == []
+
+    out = match_detected_tables([t(13, "Size", "60 C", section="Allowable amperage of conductors outside engine spaces")])
+    assert [c["page"] for c in out["ampacity_outside_engine_space"]] == [13] and out["ampacity_inside_engine_space"] == []
+    # A table that does not say which side belongs to both until they choose.
+    both = match_detected_tables([t(17, "Size", "Ampacity")])
+    assert [c["page"] for c in both["ampacity_inside_engine_space"]] == [17]
+    assert [c["page"] for c in both["ampacity_outside_engine_space"]] == [17]
+    grid = match_detected_tables([t(9, "Amperes", "10 ft", "15 ft", section="Conductor sizes for a 3 % drop")])
+    assert [c["page"] for c in grid["voltage_drop_3pct"]] == [9] and grid["voltage_drop_10pct"] == []
+
+
+def test_copying_every_table_says_what_it_could_not_do(client, manual_doc):
+    """The manual fixture holds one Parameter/Value table, which is none of
+    the standard's: nothing is copied and every table is accounted for."""
+    draft = {**_fixture("bundling_factors"), "status": "draft"}
+    assert client.put("/api/reference/e11/tables/bundling_factors", json=draft).status_code == 200
+    try:
+        report = client.post("/api/reference/e11/import-all", json={"document_id": manual_doc["id"]}).json()
+        assert report["copied"] == [] and report["ambiguous"] == [] and report["unfit"] == []
+        # Already the person's copy, so it is left exactly as it is.
+        assert report["kept"] == ["bundling_factors"]
+        assert report["not_found"] == ["constants", "circular_mils", "ampacity_outside_engine_space", "ampacity_inside_engine_space", "voltage_drop_3pct", "voltage_drop_10pct"]
+    finally:
+        client.delete("/api/reference/e11/tables/bundling_factors")
+    assert client.post("/api/reference/e11/import-all", json={"document_id": "no-such-document"}).status_code == 404
+
+
+def test_copying_every_table_drafts_the_one_it_recognises(client, manual_doc):
+    """A page that reads as the circular-mils table is copied as a draft of
+    the person's own, for them to check against the page and confirm."""
+    from app.db import session_scope
+    from app.models import Document
+
+    with session_scope() as s:
+        doc = s.get(Document, manual_doc["id"])
+        before = doc.structure
+        doc.structure = {**(before or {}), "tables": [{"page": 7, "section": "Conductor sizes", "rows": [
+            ["Conductor size AWG", "Area in circular mils", "mm2"],
+            ["18", "1620", "0.82"],
+            ["16", "2580", "1.31"],
+        ]}]}
+    try:
+        report = client.post("/api/reference/e11/import-all", json={"document_id": manual_doc["id"]}).json()
+        assert report["copied"] == [{"id": "circular_mils", "page": 7}]
+        t = client.get("/api/reference/e11/tables/circular_mils").json()
+        assert t["origin"] == "yours" and t["status"] == "draft"
+        assert t["source"]["page"] == 7 and [r["size_awg"] for r in t["rows"]] == ["18", "16"]
+    finally:
+        client.delete("/api/reference/e11/tables/circular_mils")
+        with session_scope() as s:
+            s.get(Document, manual_doc["id"]).structure = before
 
 
 def test_cheatsheet_round_trip(client):

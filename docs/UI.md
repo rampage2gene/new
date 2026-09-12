@@ -43,6 +43,11 @@ control and only inside a dense table row.
 Nothing that carries meaning is set below **12 px**, and nothing at all below
 11 px. `.tag` sat at 10 px while carrying the whole confidence ladder.
 
+**The answer is never smaller than the working.** A result's value is set as a
+value whether it is a number or a few words ("4 × 12 AWG in parallel"):
+`.result-value` takes any value short enough to read as one, so a supporting
+figure never looks louder than the answer above it.
+
 The stylesheet still holds around thirty spacing values off this scale,
 inherited from before it was written. `ui-check` reports them as warnings, not
 errors: they are normalised as each rule is next touched, not in one sweep
@@ -63,6 +68,14 @@ Use what exists before inventing:
 | Nothing to show yet | `.empty` | a blank panel |
 
 **One primary action per view.** If two things look equally primary, neither is.
+A control that is the point of a screen only while it is empty (the one-press
+import on the reference screen) is primary only then, and a plain `.btn` once
+the screen has content and a table's own Confirm is the thing that matters.
+
+**A green `.alert.ok` means nothing is left to do.** A report on a batch of
+work is `.alert.warn` while any item still needs the person, however many
+succeeded: four tables copied and two left to sort out is not a success to be
+read past. Say what succeeded first, then what is left.
 
 ## 4. Every view needs four states
 

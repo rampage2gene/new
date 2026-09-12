@@ -31,7 +31,7 @@ test("the printed grid answers only at its own voltage and inside its range", ()
   assert.equal(sizeFromPrintedGrid(24, 10, 10, 3, T).applicable, false);
   assert.equal(sizeFromPrintedGrid(12, 10, 10, 3, T).size_awg, "12");
   assert.equal(sizeFromPrintedGrid(12, 10, 5, 3, T).size_awg, "14");
-  assert.match(sizeFromPrintedGrid(12, 25, 5, 3, T).reason, /stops at 20 A/);
+  assert.match(sizeFromPrintedGrid(12, 25, 5, 3, T).reason, /stops at 20 A, so the circular-mils formula and table are used instead/);
   assert.match(sizeFromPrintedGrid(12, 10, 25, 3, T).reason, /stops at 40 ft/);
   assert.match(sizeFromPrintedGrid(12, 10, 20, 3, T).reason, /no size for 10 A at 40 ft/);
   assert.match(sizeFromPrintedGrid(12, 10, 5, 5, T).reason, /No printed table for a 5 % limit/);

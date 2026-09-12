@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.2.2 - 2026-09-12
+
+The circuit calculator answers with the cable size first, and getting your
+copy of ABYC E-11 into the app is now one press per document instead of one
+per table. Nothing is confirmed on your behalf: the app copies what it can
+read, highlights what it could not, and waits for you to check each table
+against its page.
+
+- Added: **Copy every table from this document**. Choose your copy of the
+  standard under ABYC E-11 reference and press once: every table the app
+  recognises on a page is copied as a draft for you to check. It says
+  plainly what it could not do - a table no page matched, a table two pages
+  matched (open it and choose the page), a page that would not read as that
+  table, and the tables you already have, which are never overwritten. The
+  formula constants are never found this way, because K and the formula are
+  printed as text and not as a table: type K from the page.
+- Changed: **the answer comes first.** The result opens with *Cable size* -
+  the size to use, and one plain sentence saying what decided it (the drop
+  limit, the current after derating, the printed table, or conductors in
+  parallel) - and *How it was decided* follows with the working.
+- Added: **Show cable sizes in AWG or mm².** The standard lists AWG, so mm²
+  is shown as what it is: the nearest standard metric size, with the exact
+  area of the AWG size beside it. The bill of materials follows your choice.
+- Changed: **the bundle is picked from your own table.** Instead of a yes/no
+  and a typed count, the calculator lists the rows of your confirmed
+  bundling table with their factors and pages ("3 to 6 conductors bundled
+  (× 0.7, page 14)"). Until that table is confirmed you type the count and
+  the factor from the page, as before.
+- Changed: when the printed voltage-drop table stops short of the current or
+  the length, the step now says the circular-mils formula and table are used
+  instead, rather than that "the formula result stands".
+
 ## v0.2.1 - 2026-09-11
 
 The circuit calculator plans the whole cable run: the length is typed as

@@ -101,26 +101,26 @@ def size_from_printed_grid(voltage: float, current: float, l_ft: float, drop_per
     """The printed voltage-drop grid, only at its own nominal voltage."""
     table_id = "voltage_drop_3pct" if drop_percent == 3 else "voltage_drop_10pct" if drop_percent == 10 else None
     if not table_id:
-        return {"size_awg": None, "applicable": False, "reason": f"No printed table for a {_fmt(drop_percent)} % limit; the formula result stands."}
+        return {"size_awg": None, "applicable": False, "reason": f"No printed table for a {_fmt(drop_percent)} % limit, so the circular-mils formula and table are used instead."}
     grid = usable(tables, table_id)
     if not grid:
-        return {"size_awg": None, "applicable": False, "reason": f"The printed {_fmt(drop_percent)} % table is not confirmed under Reference; the formula result stands."}
+        return {"size_awg": None, "applicable": False, "reason": f"The printed {_fmt(drop_percent)} % table is not confirmed under Reference, so the circular-mils formula and table are used instead."}
     if abs(grid["nominal_voltage"] - voltage) > 1e-9:
-        return {"size_awg": None, "applicable": False, "reason": f"No printed table for {_fmt(voltage)} V (the {_fmt(drop_percent)} % table is for {_fmt(grid['nominal_voltage'])} V); the formula result stands."}
+        return {"size_awg": None, "applicable": False, "reason": f"No printed table for {_fmt(voltage)} V (the {_fmt(drop_percent)} % table is for {_fmt(grid['nominal_voltage'])} V), so the circular-mils formula and table are used instead."}
     l = l_ft / FT_PER_M if grid["length_unit"] == "m" else l_ft
     if grid["length_definition"] == "round_trip":
         l *= 2
     rows = sorted(grid["rows"], key=lambda r: r["current"])
     row = next((r for r in rows if r["current"] >= current - 1e-9), None)
     if row is None:
-        return blank(f"The printed {_fmt(drop_percent)} % table on page {grid['source']['page']} stops at {_fmt(rows[-1]['current'])} A; the formula result stands.")
+        return blank(f"The printed {_fmt(drop_percent)} % table on page {grid['source']['page']} stops at {_fmt(rows[-1]['current'])} A, so the circular-mils formula and table are used instead.")
     lengths = sorted(grid["lengths"])
     length = next((x for x in lengths if x >= l - 1e-9), None)
     if length is None:
-        return blank(f"The printed {_fmt(drop_percent)} % table on page {row['page']} stops at {_fmt(lengths[-1])} {grid['length_unit']}; the formula result stands.")
+        return blank(f"The printed {_fmt(drop_percent)} % table on page {row['page']} stops at {_fmt(lengths[-1])} {grid['length_unit']}, so the circular-mils formula and table are used instead.")
     size = row["sizes"].get(_fmt(length))
     if not size:
-        return blank(f"The printed {_fmt(drop_percent)} % table on page {row['page']} has no size for {_fmt(row['current'])} A at {_fmt(length)} {grid['length_unit']}; the formula result stands.")
+        return blank(f"The printed {_fmt(drop_percent)} % table on page {row['page']} has no size for {_fmt(row['current'])} A at {_fmt(length)} {grid['length_unit']}, so the circular-mils formula and table are used instead.")
     return {"size_awg": size, "source": _src(grid, row["page"]), "printed_current": row["current"], "printed_length": length}
 
 

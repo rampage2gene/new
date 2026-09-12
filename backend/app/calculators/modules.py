@@ -646,6 +646,64 @@ ANSWER_INPUTS = {
 TEXT_ANSWERS = {"own.heat_shrink_size", "own.lug_part", "own.crimp_die", "own.stud"}
 
 
+def _size_note(c: dict, p: dict, inputs: dict) -> str:
+    """What decided the cable size, in plain words: the standard's rule is
+    that the larger of the requirements wins, and this says which one it was."""
+    vd, pt, am = c["voltage_drop"], c["printed_table"], c["ampacity"]
+    n, size, current = c["parallel"], c["size_awg"], fmt(inputs["current"])
+    page = f" (page {vd['source']['page']})" if vd.get("source") and "page" in vd["source"] else ""
+    if n > 1:
+        carries = f" carry {fmt(p['conductor_ampacity_a'])} A after derating" if p.get("conductor_ampacity_a") is not None else ""
+        need = "the area the drop limit needs" if c["governed_by"] == "voltage_drop" else "the current"
+        return f"No single listed size meets {need}: {n} × {size} AWG in parallel{carries}."
+    g = c["governed_by"]
+    if g == "printed_table":
+        return f"The printed {fmt(inputs['max_drop_percent'])} % table at {fmt(inputs['system_voltage'])} V asks for this size, more than the formula's {vd['size_awg']} AWG; the larger is used."
+    if g == "voltage_drop":
+        also = f"; it also carries {current} A ({am['size_awg']} AWG would)" if am.get("size_awg") else ""
+        if pt.get("reason") and "stops at" in pt["reason"]:
+            return f"{pt['reason'].split(', so')[0]}, so the circular-mils formula and the circular-mils table{page} set this size{also}."
+        return f"Set by the voltage-drop limit: {fmt(vd['cm_required'])} circular mils needed, and this is the smallest listed size with at least that{page}{also}."
+    if g == "ampacity":
+        allow = f"; the drop limit alone would allow {vd['size_awg']} AWG" if vd.get("size_awg") else ""
+        return f"Set by the current: {current} A needs this size after derating{allow}."
+    return "The larger of the requirements is used."
+
+
+def _bundle_options() -> list[dict]:
+    """The bundle choices: not bundled, then one per row of the person's
+    confirmed bundling table (the factor and page shown, the row's lowest
+    count as the value). Without that table, a typed count."""
+    from ..reference import e11_tables
+
+    options = [{"value": "2", "label": "Not bundled (this circuit's two conductors)"}]
+    table = e11_tables.usable(e11_tables.get_tables(), "bundling_factors")
+    if not table:
+        options.append({"value": "count", "label": "Bundled: type the count below"})
+        return options
+    # The synthetic test tables carry made-up numbers; the pick list says so
+    # where the choice is made, not only on the reference screen.
+    mark = ", test data" if table.get("status") == "fixture" else ""
+    seen = {"2"}
+    for row in sorted(table["rows"], key=lambda r: r["min_conductors"]):
+        hi = row.get("max_conductors")
+        if hi is not None and hi <= 2:
+            continue  # the "not bundled" row, already offered
+        value = str(max(int(row["min_conductors"]), 3))
+        if value in seen:
+            continue
+        seen.add(value)
+        span = f"{row['min_conductors']} to {hi}" if hi is not None else f"{row['min_conductors']} or more"
+        options.append({"value": value, "label": f"{span} conductors bundled (× {fmt(row['factor'])}, page {row['page']}{mark})"})
+    return options
+
+
+def _circuit_e11_spec(spec: CalculatorSpec) -> CalculatorSpec:
+    from dataclasses import replace
+
+    return replace(spec, inputs=[replace(inp, options=_bundle_options()) if inp.key == "bundle" else inp for inp in spec.inputs])
+
+
 def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
     """The whole procedure for one circuit from the owner's E-11 tables; see
     app.reference.e11_circuit. Every number cites a page or says "you"; a
@@ -659,7 +717,21 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
     limit = num(i, "max_drop_other") if limit_sel == "other" else float(limit_sel)
     if not limit or limit <= 0:
         raise CalculationError("Give the drop limit as a percentage above zero")
-    bundled = int(num(i, "bundled_conductors") or 2) if _yes(i["bundled"].value) else 2
+    # The bundle is a pick from the rows of the person's bundling table (the
+    # value is the row's lowest count) or, without that table, a typed count.
+    pick = str(i["bundle"].value or "2").strip()
+    if pick == "count":
+        n = num(i, "bundled_conductors")
+        if not n or n < 2:
+            raise CalculationError("Type how many current-carrying conductors share the bundle, this circuit's two included")
+        bundled = int(n)
+    else:
+        try:
+            bundled = int(float(pick))
+        except ValueError:
+            bundled = 2
+    bundled = max(2, bundled)
+    in_mm2 = str(i["size_unit"].value or "awg") == "mm2"
     circuit_type = str(i["circuit_type"].value or "general_dc")
     ctype = CIRCUIT_TYPES.get(circuit_type, CIRCUIT_TYPES["general_dc"])
     stud = str(i["stud_size"].value or "").strip() or None
@@ -682,7 +754,7 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
     common = dict(calculator_id="circuit_e11", calculator_name="Circuit: conductor and protection (ABYC E-11)", formula="CM = K × I × L / E; ampacity × bundling factor; the larger wins; fuse ≥ load × k and ≤ conductor ampacity", inputs=i, classification="recommended_pending_verification")
     if not any(usable(tables, tid) for tid in TABLE_IDS):
         reason = "The ABYC E-11 tables are not installed or not yet confirmed, so nothing was computed. Open Calculators → ABYC E-11 reference, import each table from your copy of the standard, check it against the page and press Confirm."
-        return CalcResult(**common, steps=[], results=[ResultValue("size_awg", "Conductor size", None, "AWG", note=reason, group="Conductor")], asks=[{"field": "reference", "input_key": None, "unit": None, "prompt": reason}], warnings=[reason])
+        return CalcResult(**common, steps=[], results=[ResultValue("size_awg", "Cable size to use", None, None, note=reason, group="Cable size")], asks=[{"field": "reference", "input_key": None, "unit": None, "prompt": reason}], warnings=[reason])
 
     r = size_circuit(inputs, tables, own, sheet)
     c, p, ft = r["conductor"], r["protection"], r["fittings"]
@@ -697,22 +769,33 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
         return f"ABYC E-11, {src.get('title') or src.get('table')}, page {src['page']}"
 
     results: list[ResultValue] = []
-    size_text = f"{c['parallel']} × {c['size_awg']} AWG in parallel" if c["size_awg"] and c["parallel"] > 1 else (f"{c['size_awg']} AWG" if c["size_awg"] else None)
-    governed = {"voltage_drop": "the voltage-drop limit", "ampacity": "the current it must carry", "printed_table": "the printed table"}.get(c["governed_by"] or "", "")
-    size_note = f"Governed by {governed}." if size_text else next((b["reason"] for b in r["blanks"] if b["field"].startswith("conductor.")), "No conductor size was settled.")
-    results.append(ResultValue("size_awg", "Conductor size", size_text, None, classification="documented_value" if size_text else "recommended_pending_verification", note=size_note, group="Conductor"))
+    n_par = c["parallel"]
+    awg_text = (f"{n_par} × {c['size_awg']} AWG in parallel" if n_par > 1 else f"{c['size_awg']} AWG") if c["size_awg"] else None
+    metric = c["metric_standard_mm2"] or c["size_mm2"]
+    metric_text = None
+    if c["size_awg"] and metric is not None:
+        metric_text = f"{n_par} × {fmt(metric)} mm² in parallel ({n_par} × {c['size_awg']} AWG)" if n_par > 1 else f"{fmt(metric)} mm² ({c['size_awg']} AWG)"
+    size_text = (metric_text or awg_text) if in_mm2 else awg_text
+    size_note = _size_note(c, p, inputs) if size_text else next((b["reason"] for b in r["blanks"] if b["field"].startswith("conductor.")), "No conductor size was settled.")
+    results.append(ResultValue("size_awg", "Cable size to use", size_text, None, classification="documented_value" if size_text else "recommended_pending_verification", note=size_note, group="Cable size"))
     if c["size_mm2"] is not None:
-        results.append(ResultValue("size_mm2", "Same area in mm²", c["size_mm2"], "mm²", classification="calculated_estimate", note=f"Unit conversion (1 circular mil = 0.0005067 mm²); nearest standard metric size {fmt(c['metric_standard_mm2'])} mm²" if c["metric_standard_mm2"] else "Unit conversion (1 circular mil = 0.0005067 mm²)", group="Conductor"))
+        each = " each" if n_par > 1 else ""
+        std = f"{fmt(c['metric_standard_mm2'])} mm² is the smallest standard metric size (IEC 60228) at least as large." if c["metric_standard_mm2"] else "Larger than the largest standard metric size (IEC 60228), 300 mm²."
+        results.append(ResultValue("size_mm2", "Exact area of that AWG size" if in_mm2 else "Same area in mm²", c["size_mm2"], "mm²", classification="calculated_estimate", note=f"{c['size_awg']} AWG is {fmt(c['size_mm2'])} mm²{each}. {std} A conversion; the standard's sizes are AWG.", group="Cable size"))
     vd = c["voltage_drop"]
-    results.append(ResultValue("cm_required", "Circular mils needed for the drop limit", vd["cm_required"], "CM", classification="documented_value", note=vd.get("reason") or cite(vd.get("source")), group="Conductor"))
-    results.append(ResultValue("voltage_drop_size", "Size for the voltage drop", f"{vd['size_awg']} AWG" if vd["size_awg"] else None, None, classification="documented_value", note=vd.get("reason") or cite(vd.get("source")), group="Conductor"))
     pt = c["printed_table"]
-    results.append(ResultValue("printed_table_size", "Size from the printed table", f"{pt['size_awg']} AWG" if pt["size_awg"] else None, None, classification="documented_value", note=pt.get("reason") or cite(pt.get("source")), group="Conductor"))
     am = c["ampacity"]
-    amp_note = am.get("reason") or f"{fmt(am['ampacity_a'])} A × bundling factor {fmt(am['bundling_factor'])} ({cite(am.get('source'))})"
-    results.append(ResultValue("ampacity_size", "Size for the current, derated", f"{am['size_awg']} AWG" if am["size_awg"] else None, None, classification="documented_value", note=amp_note, group="Conductor"))
+    how = "How it was decided"
+    results.append(ResultValue("cm_required", "Circular mils needed for the drop limit", vd["cm_required"], "CM", classification="documented_value", note=vd.get("reason") or cite(vd.get("source")), group=how))
+    results.append(ResultValue("printed_table_size", "Size from the printed table", f"{pt['size_awg']} AWG" if pt["size_awg"] else None, None, classification="documented_value", note=pt.get("reason") or cite(pt.get("source")), group=how))
+    results.append(ResultValue("voltage_drop_size", "Size for the voltage drop, from the formula", f"{vd['size_awg']} AWG" if vd["size_awg"] else None, None, classification="documented_value", note=vd.get("reason") or cite(vd.get("source")), group=how))
+    # A factor typed from the page always wins over the table, so saying so
+    # here is simply whether they gave one.
+    by_you = " (factor entered by you)" if "bundling_factor" in own else ""
+    amp_note = am.get("reason") or f"{fmt(am['ampacity_a'])} A × bundling factor {fmt(am['bundling_factor'])}{by_you} ({cite(am.get('source'))})"
+    results.append(ResultValue("ampacity_size", "Size for the current, derated", f"{am['size_awg']} AWG" if am["size_awg"] else None, None, classification="documented_value", note=amp_note, group=how))
     d = c["drop_at_size"]
-    results.append(ResultValue("drop_at_size", "Drop at that size", d["volts"], "V", classification="calculated_estimate", note=d.get("reason") or (f"{fmt(d['percent'])} % of {fmt(inputs['system_voltage'])} V" if d["percent"] is not None else None), group="Conductor"))
+    results.append(ResultValue("drop_at_size", "Drop at the chosen size", d["volts"], "V", classification="calculated_estimate", note=d.get("reason") or (f"{fmt(d['percent'])} % of {fmt(inputs['system_voltage'])} V" if d["percent"] is not None else None), group=how))
 
     fuse_note = p.get("reason") or (f"At least {fmt(p['min_a'])} A for the load, within the conductor's {fmt(p['conductor_ampacity_a'])} A" if p["fuse_a"] is not None else None)
     results.append(ResultValue("fuse_a", "Fuse or breaker", p["fuse_a"], "A", classification="recommended_pending_verification", note=fuse_note, group="Protection"))
@@ -737,7 +820,8 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
     q = ft["quantities"]
     if q and c["size_awg"]:
         n = q["cables"]
-        results.append(ResultValue("bom_cable", "Cable to buy", f"{n} × {c['size_awg']} AWG, {fmt(q['cable_length'])} {q['length_unit']}", None, classification="calculated_estimate", note=f"{fmt(inputs['length'])} {q['length_unit']} there and back per cable, plus your own routing allowance; none is added here.", group="Bill of materials"))
+        size_each = f"{fmt(metric)} mm² ({c['size_awg']} AWG)" if in_mm2 and metric is not None else f"{c['size_awg']} AWG"
+        results.append(ResultValue("bom_cable", "Cable to buy", f"{n} × {size_each}, {fmt(q['cable_length'])} {q['length_unit']}", None, classification="calculated_estimate", note=f"{fmt(inputs['length'])} {q['length_unit']} there and back per cable, plus your own routing allowance; none is added here.", group="Bill of materials"))
         results.append(ResultValue("bom_lugs", "Lugs", f"{q['lugs']} × {lug['part']}" if lug["part"] else f"{q['lugs']} lugs needed; part not chosen yet", None, classification="calculated_estimate", note="Two per cable.", group="Bill of materials"))
         results.append(ResultValue("bom_heat_shrink", "Heat shrink", f"{q['heat_shrink_pieces']} pieces of {hs['size']}" if hs["size"] else f"{q['heat_shrink_pieces']} pieces needed; size not chosen yet", None, classification="calculated_estimate", note="Two per cable, one over each lug barrel.", group="Bill of materials"))
         results.append(ResultValue("bom_fuse", "Fuse or breaker", f"1 × {fmt(p['fuse_a'])} A, {p['characteristic']}" if p["fuse_a"] is not None else "1, rating not yet settled", None, classification="recommended_pending_verification", note=p["guidance"] if p["fuse_a"] is not None else p.get("reason"), group="Bill of materials"))
@@ -773,7 +857,7 @@ def _circuit_e11(i: dict[str, InputValue]) -> CalcResult:
 CIRCUIT_E11 = Calculator(
     CalculatorSpec(
         id="circuit_e11", name="Circuit: conductor and protection (ABYC E-11)", category="Conductors",
-        description="From current, the length there and back, and any nominal voltage to the conductor size (voltage drop first, then the current it must carry with engine-space and bundling derating, conductors in parallel when one is not enough), the fuse for that conductor, the fittings for each cable (heat shrink, lug, crimp die from your own catalogs) and the bill of materials - from your confirmed copy of ABYC E-11, every number with its page. What the tables do not cover comes back as a blank you can fill in.",
+        description="From current, the length there and back, what the circuit feeds, the bundle as your table lists it and any nominal voltage to the cable size, in AWG or mm² (voltage drop first, then the current it must carry with engine-space and bundling derating, conductors in parallel when one is not enough), the fuse for that conductor, the fittings for each cable (heat shrink, lug, crimp die from your own catalogs) and the bill of materials - from your confirmed copy of ABYC E-11, every number with its page. What the tables do not cover comes back as a blank you can fill in.",
         formula="CM = K × I × L / E; ampacity × bundling factor; larger wins; fuse ≥ load × k, ≤ conductor",
         inputs=[
             InputSpec("system_voltage", "System voltage", "V", entity_types=["voltage"], qualifiers=["nominal"], help="any nominal voltage: 12, 24, 32, 36, 48…"),
@@ -781,12 +865,13 @@ CIRCUIT_E11 = Calculator(
             InputSpec("current", "Circuit current", "A", entity_types=["current", "fuse", "breaker"], qualifiers=["continuous", "maximum"]),
             InputSpec("length", "Total length of the run, there and back", None, help="from the source to the device and back to the source"),
             InputSpec("length_unit", "Length unit", None, kind="select", default="m", options=[{"value": "m", "label": "metres"}, {"value": "ft", "label": "feet"}]),
+            InputSpec("size_unit", "Show cable sizes in", None, kind="select", default="awg", options=[{"value": "awg", "label": "AWG"}, {"value": "mm2", "label": "mm²"}], help="the tables list AWG; mm² is the nearest standard metric size, a conversion"),
             InputSpec("max_drop_percent", "Voltage-drop limit", None, kind="select", default="3", options=[{"value": "3", "label": "3 % (critical circuits)"}, {"value": "10", "label": "10 % (non-critical)"}, {"value": "other", "label": "other"}]),
             InputSpec("max_drop_other", "Other limit", "%", required=False, help="only when the limit is 'other'"),
             InputSpec("insulation_rating_c", "Insulation rating", "°C", default=105, help="as printed on the cable"),
             InputSpec("engine_space", "Runs through an engine space", None, kind="select", default="no", options=[{"value": "no", "label": "No"}, {"value": "yes", "label": "Yes"}]),
-            InputSpec("bundled", "Bundled with other conductors", None, kind="select", default="no", options=[{"value": "no", "label": "No"}, {"value": "yes", "label": "Yes"}]),
-            InputSpec("bundled_conductors", "Current-carrying conductors in the bundle", None, required=False, help="this circuit's two included"),
+            InputSpec("bundle", "Conductors bundled together", None, kind="select", default="2", options=[], help="the rows of your bundling table, once it is confirmed"),
+            InputSpec("bundled_conductors", "Current-carrying conductors in the bundle", None, required=False, help="this circuit's two included; only when the bundling table is not confirmed"),
             InputSpec("stud_size", "Terminal stud the lugs land on", None, kind="text", required=False, help="as the lug catalog names it: 5/16, 3/8, M8, M10"),
             InputSpec("short_circuit_a", "Source short-circuit current", "A", required=False, entity_types=["current"], qualifiers=["short circuit", "short-circuit", "fault"], help="from the battery datasheet"),
             InputSpec("manufacturer_fuse", "Maker's stated fuse", "A", required=False, entity_types=["fuse", "breaker"], qualifiers=["recommended", "required"]),
@@ -799,11 +884,12 @@ CIRCUIT_E11 = Calculator(
             InputSpec("own_lug_part", "Lug part from the catalog", None, kind="text", required=False, answers="fittings.lug.part"),
             InputSpec("own_crimp_die", "Crimp die from the crimper's chart", None, kind="text", required=False, answers="fittings.lug.crimp_die"),
         ],
-        outputs=[{"key": "size_awg", "label": "Conductor size"}, {"key": "fuse_a", "label": "Fuse or breaker", "unit": "A"}],
+        outputs=[{"key": "size_awg", "label": "Cable size to use"}, {"key": "fuse_a", "label": "Fuse or breaker", "unit": "A"}],
         notes=["Every table value cites its page in your confirmed copy of ABYC E-11. What the tables do not cover comes back blank, with a box for the value from the page; what you type is marked as yours."],
         excel=[],
     ),
     _circuit_e11,
+    resolve=_circuit_e11_spec,
 )
 
 

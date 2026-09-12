@@ -53,7 +53,9 @@ const ROUTES = [
   ["search", "/search"],
   ["calculators", "/calculators"],
   ["calculator-circuit", "/calculators/circuit_e11"],
+  ["calculator-circuit-answer", "/calculators/circuit_e11"],
   ["reference", "/calculators/reference"],
+  ["reference-copy-all", "/calculators/reference"],
   ["compare", "/compare"],
   ["invoices", "/invoices"],
   ["convert", "/convert"],
@@ -85,6 +87,24 @@ const ACT = {
     await page.getByRole("button", { name: "Calculate", exact: true }).click().catch(() => {});
     await page.locator(".calc-result").waitFor({ timeout: 15000 }).catch(() => {});
     await page.locator(".calc-result").scrollIntoViewIfNeeded().catch(() => {});
+  },
+  // The same circuit, photographed at the answer: the "Cable size" group and
+  // the one sentence saying what decided it are what the person came for.
+  "calculator-circuit-answer": async (page) => {
+    await ACT["calculator-circuit"](page);
+    await page.getByText("Cable size", { exact: true }).first().scrollIntoViewIfNeeded().catch(() => {});
+    await sleep(200);
+  },
+  // The one-click copy and its report: on the sample library nothing matches
+  // a table of the standard, so the picture shows what the app says when it
+  // found nothing - the state the owner meets before their own copy is in.
+  "reference-copy-all": async (page) => {
+    const select = page.locator("label", { hasText: "Your copy of the standard" }).locator("select");
+    const value = await select.locator("option").nth(1).getAttribute("value").catch(() => null);
+    if (value) await select.selectOption(value).catch(() => {});
+    await page.getByRole("button", { name: /Copy every table/ }).click().catch(() => {});
+    await page.getByText(/Not found in this document|Copied \d+ table/).first().waitFor({ timeout: 15000 }).catch(() => {});
+    await sleep(300);
   },
   // One table opened, with a fresh row whose cells are still empty: the
   // highlighted "from the page" cells and the refused Confirm are the point.

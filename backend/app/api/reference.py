@@ -227,21 +227,125 @@ def import_table(table_id: str, req: ImportRequest, db: Session = Depends(get_db
     return get_table(table_id)
 
 
-@router.get("/documents/{document_id}/tables")
-def detected_tables(document_id: str, db: Session = Depends(get_db)) -> list[dict]:
-    """The tables the app detected in a document, page by page, for the import picker."""
-    doc = db.get(Document, document_id)
-    if not doc:
-        raise HTTPException(404, "Document not found")
+# The tables of the standard that can be copied from a page; the rest are
+# typed from the makers' catalogs.
+IMPORTABLE_IDS = tuple(t for t in TABLE_IDS if KIND_OF[t] not in CATALOG_KINDS)
+
+# One hint per table: the words the page prints on it. They are deliberately
+# narrow - a hint that matches two tables makes the import ask which page,
+# and a hint that matches none says so, which is the honest answer.
+# "constants" has no hint: K and the formula are printed as text, not as a
+# table, so the app never finds them in a detected table.
+_HINTS = {
+    "circular_mils": re.compile(r"circular\s*mil"),
+    # "factor" alone is not enough: the ampacity pages print "correction
+    # factor for temperature" too.
+    "bundling_factors": re.compile(r"bundl"),
+    # The digit before the percentage must not be part of a longer number,
+    # so "13 %" is not the 3 % table.
+    "voltage_drop_3pct": re.compile(r"(?<!\d)3\s*(?:%|percent)"),
+    "voltage_drop_10pct": re.compile(r"(?<!\d)10\s*(?:%|percent)"),
+}
+_AMPACITY_WORD = re.compile(r"ampacity|allowable|amperage")
+_INSIDE = re.compile(r"\b(?:inside|in|within)\b\s+(?:an?\s+)?engine")
+_OUTSIDE = re.compile(r"\boutside\b")
+
+
+def _index_tables(doc: Document) -> list[dict]:
+    """Every table the app detected in a document, numbered within its page
+    so the number agrees with the import picker."""
     out = []
     by_page: dict[int, int] = {}
     for t in (doc.structure or {}).get("tables", []):
         page = t.get("page")
         idx = by_page.get(page, 0)
         by_page[page] = idx + 1
-        rows = t.get("rows", [])
-        out.append({"page": page, "table_index": idx, "header": rows[0] if rows else [], "rows": len(rows), "section": t.get("section")})
+        out.append({"page": page, "table_index": idx, "rows": t.get("rows", []), "section": t.get("section")})
     return out
+
+
+def _table_words(t: dict) -> str:
+    """The words to match a detected table by: its section heading, its
+    header row and the label at the start of each row."""
+    rows = t.get("rows") or []
+    parts = [t.get("section") or ""]
+    parts += [str(c) for c in (rows[0] if rows else [])]
+    parts += [str(r[0]) for r in rows[1:] if r]
+    return " ".join(parts).lower()
+
+
+def match_detected_tables(tables: list[dict]) -> dict[str, list[dict]]:
+    """Which detected tables look like which table of the standard, by the
+    words printed on them. Nothing is decided here: a table of the standard
+    that two pages match is reported as a question, not a choice the app
+    makes for the person."""
+    out: dict[str, list[dict]] = {tid: [] for tid in IMPORTABLE_IDS}
+    for t in tables:
+        words = _table_words(t)
+        for tid, hint in _HINTS.items():
+            if hint.search(words):
+                out[tid].append(t)
+        if _AMPACITY_WORD.search(words):
+            # Both titles name engine spaces, so "engine" alone says nothing:
+            # a table that does not say which side is a candidate for both,
+            # and the person picks the page.
+            inside, outside = _INSIDE.search(words), _OUTSIDE.search(words)
+            if inside or not outside:
+                out["ampacity_inside_engine_space"].append(t)
+            if outside or not inside:
+                out["ampacity_outside_engine_space"].append(t)
+    return out
+
+
+class ImportAllRequest(BaseModel):
+    document_id: str
+
+
+@router.post("/import-all")
+def import_all(req: ImportAllRequest, db: Session = Depends(get_db)) -> dict:
+    """Copy every table of the standard this document appears to hold, in one
+    go, as drafts for the person to check against the page and confirm. A
+    table already saved here is left exactly as it is; a table nothing matches
+    and a table two pages match are reported, never guessed at."""
+    doc = db.get(Document, req.document_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    found = match_detected_tables(_index_tables(doc))
+    saved = e11_tables.get_tables()
+    copied: list[dict] = []
+    not_found: list[str] = []
+    ambiguous: list[dict] = []
+    kept: list[str] = []
+    unfit: list[dict] = []
+    for tid in IMPORTABLE_IDS:
+        if saved.origin.get(tid) == "yours":
+            kept.append(tid)
+            continue
+        candidates = found[tid]
+        if not candidates:
+            not_found.append(tid)
+            continue
+        if len(candidates) > 1:
+            ambiguous.append({"id": tid, "pages": sorted({c["page"] for c in candidates})})
+            continue
+        c = candidates[0]
+        draft = _draft_from_rows(tid, c["rows"], c["page"], doc)
+        try:
+            e11_tables.save_table(draft)
+        except TableError as exc:
+            unfit.append({"id": tid, "page": c["page"], "reason": str(exc)})
+            continue
+        copied.append({"id": tid, "page": c["page"]})
+    return {"copied": copied, "not_found": not_found, "ambiguous": ambiguous, "kept": kept, "unfit": unfit}
+
+
+@router.get("/documents/{document_id}/tables")
+def detected_tables(document_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    """The tables the app detected in a document, page by page, for the import picker."""
+    doc = db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    return [{**t, "header": t["rows"][0] if t["rows"] else [], "rows": len(t["rows"])} for t in _index_tables(doc)]
 
 
 @router.get("/cheatsheet")

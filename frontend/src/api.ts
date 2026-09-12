@@ -1,4 +1,4 @@
-import type { Answer, CalcResult, CalculatorSpec, CheatSheetResponse, CompareResult, DetectedTable, DiagnosticsInfo as Diagnostics, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, Invoice, LanInfo, PageData, QCFlag, ReferenceStatus, ReferenceTable, SearchResponse, SpecExtraction, Status } from "./types";
+import type { Answer, CalcResult, CalculatorSpec, CheatSheetResponse, CompareResult, DetectedTable, DiagnosticsInfo as Diagnostics, DiagramAnalysis, DocumentDetail, DocumentSummary, Entity, ImportAllReport, Invoice, LanInfo, PageData, QCFlag, ReferenceStatus, ReferenceTable, SearchResponse, SpecExtraction, Status } from "./types";
 
 /* ------------------------------------------------------------------ pairing
  * The desktop app also serves the UI on the local network so a phone on the
@@ -322,6 +322,7 @@ export const api = {
   saveReferenceTable: (id: string, table: Record<string, unknown>) => request<ReferenceTable>(`/api/reference/e11/tables/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(table) }),
   deleteReferenceTable: (id: string) => request<ReferenceTable>(`/api/reference/e11/tables/${id}`, { method: "DELETE" }),
   importReferenceTable: (id: string, body: { document_id: string; page: number; table_index: number }) => request<ReferenceTable>(`/api/reference/e11/tables/${id}/import`, json(body)),
+  importAllReferenceTables: (documentId: string) => request<ImportAllReport>("/api/reference/e11/import-all", json({ document_id: documentId })),
   detectedTables: (documentId: string) => request<DetectedTable[]>(`/api/reference/e11/documents/${documentId}/tables`),
   referenceCheatSheet: () => request<CheatSheetResponse>("/api/reference/e11/cheatsheet"),
   saveCheatSheet: (body: Record<string, unknown>) => request<CheatSheetResponse>("/api/reference/e11/cheatsheet", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

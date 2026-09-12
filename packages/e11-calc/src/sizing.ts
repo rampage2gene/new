@@ -108,20 +108,20 @@ export interface GridNotApplicable {
 /** The printed voltage-drop grid, only at its own nominal voltage. */
 export function sizeFromPrintedGrid(voltage: number, current: number, lengthFt: number, dropPercent: number, tables: E11Tables): GridPick | Blank | GridNotApplicable {
   const id = dropPercent === 3 ? "voltage_drop_3pct" : dropPercent === 10 ? "voltage_drop_10pct" : null;
-  if (!id) return { size_awg: null, applicable: false, reason: `No printed table for a ${dropPercent} % limit; the formula result stands.` };
+  if (!id) return { size_awg: null, applicable: false, reason: `No printed table for a ${dropPercent} % limit, so the circular-mils formula and table are used instead.` };
   const grid = usable<VoltageDropGrid>(tables, id);
-  if (!grid) return { size_awg: null, applicable: false, reason: `The printed ${dropPercent} % table is not confirmed under Reference; the formula result stands.` };
-  if (Math.abs(grid.nominal_voltage - voltage) > 1e-9) return { size_awg: null, applicable: false, reason: `No printed table for ${voltage} V (the ${dropPercent} % table is for ${grid.nominal_voltage} V); the formula result stands.` };
+  if (!grid) return { size_awg: null, applicable: false, reason: `The printed ${dropPercent} % table is not confirmed under Reference, so the circular-mils formula and table are used instead.` };
+  if (Math.abs(grid.nominal_voltage - voltage) > 1e-9) return { size_awg: null, applicable: false, reason: `No printed table for ${voltage} V (the ${dropPercent} % table is for ${grid.nominal_voltage} V), so the circular-mils formula and table are used instead.` };
   let l = grid.length_unit === "m" ? lengthFt / FT_PER_M : lengthFt;
   if (grid.length_definition === "round_trip") l *= 2;
   const rows = [...grid.rows].sort((a, b) => a.current - b.current);
   const row = rows.find((r) => r.current >= current - 1e-9);
-  if (!row) return { value: null, reason: `The printed ${dropPercent} % table on page ${grid.source.page} stops at ${rows[rows.length - 1].current} A; the formula result stands.` };
+  if (!row) return { value: null, reason: `The printed ${dropPercent} % table on page ${grid.source.page} stops at ${rows[rows.length - 1].current} A, so the circular-mils formula and table are used instead.` };
   const lengths = [...grid.lengths].sort((a, b) => a - b);
   const len = lengths.find((x) => x >= l - 1e-9);
-  if (len == null) return { value: null, reason: `The printed ${dropPercent} % table on page ${row.page} stops at ${lengths[lengths.length - 1]} ${grid.length_unit}; the formula result stands.` };
+  if (len == null) return { value: null, reason: `The printed ${dropPercent} % table on page ${row.page} stops at ${lengths[lengths.length - 1]} ${grid.length_unit}, so the circular-mils formula and table are used instead.` };
   const size = row.sizes[String(len)];
-  if (!size) return { value: null, reason: `The printed ${dropPercent} % table on page ${row.page} has no size for ${row.current} A at ${len} ${grid.length_unit}; the formula result stands.` };
+  if (!size) return { value: null, reason: `The printed ${dropPercent} % table on page ${row.page} has no size for ${row.current} A at ${len} ${grid.length_unit}, so the circular-mils formula and table are used instead.` };
   return { size_awg: size, source: src(grid, row.page), printed_current: row.current, printed_length: len };
 }
 

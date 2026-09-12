@@ -91,10 +91,15 @@ export default function CalculatorsPage() {
     }
   };
 
+  // The specs are fetched again whenever the calculator changes: the bundle
+  // choices in the circuit calculator come from the person's reference
+  // tables, so a table confirmed a moment ago must show up here at once.
   useEffect(() => {
     api.calculators().then((s) => { setSpecs(s); if (!calcId && s.length) navigate(`/calculators/${s[0].id}`, { replace: true }); });
-    api.listDocuments().then((d) => setDocs(d.filter((x) => x.status === "ready")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcId]);
+  useEffect(() => {
+    api.listDocuments().then((d) => setDocs(d.filter((x) => x.status === "ready")));
   }, []);
 
   const spec = useMemo(() => specs.find((s) => s.id === calcId) || null, [specs, calcId]);
@@ -156,7 +161,7 @@ export default function CalculatorsPage() {
   const visible = (inp: InputSpec) => {
     if (inp.answers) return Boolean(result?.asks?.some((a) => a.input_key === inp.key)) || (form[inp.key]?.value !== "" && form[inp.key]?.value != null);
     if (inp.key === "max_drop_other") return String(form.max_drop_percent?.value) === "other";
-    if (inp.key === "bundled_conductors") return String(form.bundled?.value) === "yes";
+    if (inp.key === "bundled_conductors") return String(form.bundle?.value) === "count";
     return true;
   };
 
@@ -263,6 +268,11 @@ export default function CalculatorsPage() {
                 {g.name && <h4 style={{ marginTop: 10 }}>{g.name}</h4>}
                 {g.items.map((r) => {
                   const ask = result.asks?.find((a) => a.field === ASK_FOR_ROW[r.key] || (r.key === "size_awg" && a.field === "reference"));
+                  // A short answer in words - "6 AWG", "4 x 12 AWG in
+                  // parallel" - is the value of the row just as much as a
+                  // number is, and reads as the answer only if it is set like
+                  // one. A long one stays in the line of text.
+                  const isValue = typeof r.value === "number" || String(r.value).length <= 24;
                   return (
                     <div key={r.key} style={{ marginBottom: 10 }}>
                       <div className={`classification ${r.classification}`}>{r.classification.replace(/_/g, " ")}</div>
@@ -282,7 +292,7 @@ export default function CalculatorsPage() {
                           {ask?.input_key === "own_lug_part" && <div className="small muted" style={{ marginTop: 4 }}>Or add the row to your lugs table under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
                         </div>
                       ) : (
-                        <div><span className={typeof r.value === "number" ? "result-value" : ""}>{typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span> {r.unit && <b>{r.unit}</b>} <span className="muted">{typeof r.value === "number" ? r.label : `— ${r.label}`}</span></div>
+                        <div><span className={isValue ? "result-value" : ""}>{typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span> {r.unit && <b>{r.unit}</b>} <span className="muted">{isValue ? r.label : `— ${r.label}`}</span></div>
                       )}
                       {r.value != null && r.note && <div className="small muted">{r.note}</div>}
                     </div>
