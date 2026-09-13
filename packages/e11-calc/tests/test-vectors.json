@@ -1,0 +1,971 @@
+{
+  "_note": "Run by both node --test (packages/e11-calc/tests/circuit.test.mjs) and pytest (backend/tests/test_e11_reference.py) against the synthetic fixture in tests/fixtures. `expect` is a subset the result must match; `blanks` lists blanks that must be present (field, reason_contains, ask_field); `omit` drops tables before loading; `present` checks the words both engines put on the screen (row group/label/value/unit/classification, `note_contains`, the group order and the choices each condition offers). `defaults.stud_size` is set so the fixture lugs table answers the lug for every size; cases that need the lug blank set it to null.",
+  "tables": "fixtures/tables",
+  "cheatsheet": "fixtures/cheatsheet/cheatsheet.json",
+  "defaults": {
+    "system_voltage": 24,
+    "current": 10,
+    "length": 5,
+    "length_unit": "m",
+    "max_drop_percent": 3,
+    "insulation_rating_c": 105,
+    "engine_space": false,
+    "bundled_conductors": 2,
+    "load_type": "resistive",
+    "stud_size": "5/16"
+  },
+  "cases": [
+    {
+      "name": "voltage drop governs",
+      "inputs": {},
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "size_mm2": 4.05,
+          "metric_standard_mm2": 6,
+          "parallel": 1,
+          "governed_by": "voltage_drop",
+          "voltage_drop": {
+            "cm_required": 4556.7,
+            "size_awg": "12",
+            "source": {
+              "table": "circular_mils",
+              "page": 1
+            }
+          },
+          "printed_table": {
+            "size_awg": null
+          },
+          "ampacity": {
+            "size_awg": "18",
+            "ampacity_a": 20,
+            "bundling_factor": 1,
+            "source": {
+              "table": "ampacity_outside_engine_space",
+              "page": 2
+            }
+          },
+          "drop_at_size": {
+            "volts": 0.41,
+            "percent": 1.7
+          }
+        },
+        "protection": {
+          "min_a": 12.5,
+          "fuse_a": 15,
+          "fits_conductor": true,
+          "conductor_ampacity_a": 60,
+          "interrupting": {
+            "required_a": null,
+            "classes": []
+          }
+        },
+        "fixture": true
+      },
+      "blanks": [
+        {
+          "field": "protection.interrupting.required_a",
+          "reason_contains": "short-circuit current was not given",
+          "ask_field": "own.short_circuit_a"
+        }
+      ],
+      "blanks_count": 1,
+      "reminders_count": 1,
+      "present": {
+        "groups": [
+          "Cable size",
+          "How it was decided",
+          "Protection",
+          "Fittings",
+          "Bill of materials"
+        ],
+        "rows": {
+          "size_awg": {
+            "group": "Cable size",
+            "label": "Cable size to use",
+            "value": "12 AWG",
+            "classification": "documented_value",
+            "note_contains": "Set by the voltage-drop limit: 4,556.7 circular mils needed"
+          },
+          "size_mm2": {
+            "group": "Cable size",
+            "label": "Same area in mm²",
+            "value": 4.05,
+            "unit": "mm²",
+            "note_contains": "12 AWG is 4.05 mm²"
+          },
+          "cm_required": {
+            "group": "How it was decided",
+            "label": "Circular mils needed for the drop limit",
+            "value": 4556.7,
+            "unit": "CM"
+          },
+          "ampacity_size": {
+            "group": "How it was decided",
+            "value": "18 AWG",
+            "note_contains": "20 A × bundling factor 1 ("
+          }
+        },
+        "condition_options": {
+          "bundle": [
+            "Not bundled (this circuit's two conductors)",
+            "3 to 6 conductors bundled (× 0.5, page 3, test data)",
+            "7 to 24 conductors bundled (× 0.25, page 3, test data)"
+          ],
+          "insulation_rating_c": [
+            "60 °C (page 2, test data)",
+            "105 °C (page 2, test data)"
+          ],
+          "max_drop_percent": [
+            "3 % (critical circuits) — printed table at 12 V (page 4, test data)",
+            "10 % (non-critical) — printed table at 12 V (page 5, test data)",
+            "other"
+          ],
+          "engine_space": [
+            "No",
+            "Yes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "ampacity governs, fuse would exceed the conductor",
+      "inputs": {
+        "system_voltage": 48,
+        "current": 30,
+        "length": 1,
+        "max_drop_percent": 10,
+        "load_type": "motor",
+        "short_circuit_a": 3000
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "16",
+          "size_mm2": 1.01,
+          "metric_standard_mm2": 1.5,
+          "parallel": 1,
+          "governed_by": "ampacity",
+          "voltage_drop": {
+            "cm_required": 410.1,
+            "size_awg": "18"
+          },
+          "ampacity": {
+            "size_awg": "16",
+            "ampacity_a": 30,
+            "bundling_factor": 1
+          },
+          "drop_at_size": {
+            "volts": 0.98,
+            "percent": 2.1
+          }
+        },
+        "protection": {
+          "min_a": 45,
+          "fuse_a": null,
+          "fits_conductor": false,
+          "conductor_ampacity_a": 30,
+          "interrupting": {
+            "required_a": 3000,
+            "classes": [
+              {
+                "class": "Class X",
+                "interrupting_rating_a": 20000,
+                "suits_load": false
+              }
+            ]
+          }
+        }
+      },
+      "blanks": [
+        {
+          "field": "protection.fuse_a",
+          "reason_contains": "would exceed the conductor's 30 A"
+        }
+      ],
+      "blanks_count": 1
+    },
+    {
+      "name": "12 V: the printed grid agrees with the formula",
+      "inputs": {
+        "system_voltage": 12,
+        "current": 10,
+        "length": 10,
+        "length_unit": "ft"
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "governed_by": "voltage_drop",
+          "parallel": 1,
+          "voltage_drop": {
+            "cm_required": 5555.6,
+            "size_awg": "12"
+          },
+          "printed_table": {
+            "size_awg": "12",
+            "source": {
+              "table": "voltage_drop_3pct",
+              "page": 4
+            }
+          },
+          "ampacity": {
+            "size_awg": "18"
+          },
+          "drop_at_size": {
+            "volts": 0.25,
+            "percent": 2.1
+          }
+        },
+        "protection": {
+          "fuse_a": 15,
+          "fits_conductor": true
+        }
+      },
+      "blanks_count": 1
+    },
+    {
+      "name": "12 V: the printed grid asks for more than the formula, so it governs",
+      "inputs": {
+        "system_voltage": 12,
+        "current": 5,
+        "length": 10,
+        "length_unit": "ft"
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "governed_by": "printed_table",
+          "parallel": 1,
+          "voltage_drop": {
+            "cm_required": 2777.8,
+            "size_awg": "14"
+          },
+          "printed_table": {
+            "size_awg": "12"
+          },
+          "ampacity": {
+            "size_awg": "18"
+          },
+          "drop_at_size": {
+            "volts": 0.13,
+            "percent": 1.0
+          }
+        },
+        "protection": {
+          "min_a": 6.25,
+          "fuse_a": 7.5,
+          "fits_conductor": true,
+          "conductor_ampacity_a": 60
+        }
+      },
+      "blanks_count": 1,
+      "present": {
+        "rows": {
+          "size_awg": {
+            "value": "12 AWG",
+            "note_contains": "more than the formula's 14 AWG; the larger is used."
+          }
+        }
+      }
+    },
+    {
+      "name": "current beyond the ampacity table: conductors in parallel",
+      "inputs": {
+        "current": 100,
+        "length": 2,
+        "max_drop_percent": 10,
+        "load_type": "battery_main",
+        "short_circuit_a": 5000
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "parallel": 2,
+          "governed_by": "ampacity",
+          "size_mm2": 4.05,
+          "metric_standard_mm2": 6,
+          "voltage_drop": {
+            "cm_required": 5468.1,
+            "size_awg": "12"
+          },
+          "ampacity": {
+            "size_awg": null,
+            "bundling_factor": 1
+          },
+          "drop_at_size": {
+            "volts": 0.82,
+            "percent": 3.4
+          }
+        },
+        "protection": {
+          "min_a": 100,
+          "fuse_a": 100,
+          "fits_conductor": true,
+          "conductor_ampacity_a": 120,
+          "interrupting": {
+            "required_a": 5000,
+            "classes": [
+              {
+                "class": "Class X",
+                "suits_load": true
+              }
+            ]
+          }
+        }
+      },
+      "blanks_count": 0,
+      "reminders_count": 2,
+      "present": {
+        "rows": {
+          "size_awg": {
+            "value": "2 × 12 AWG in parallel",
+            "note_contains": "No single listed size meets the current: 2 × 12 AWG in parallel"
+          }
+        }
+      }
+    },
+    {
+      "name": "area beyond the largest size: conductors in parallel, printed grid has no cell",
+      "inputs": {
+        "system_voltage": 12,
+        "current": 20,
+        "length": 5
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "parallel": 3,
+          "governed_by": "voltage_drop",
+          "voltage_drop": {
+            "cm_required": 18226.9,
+            "size_awg": null
+          },
+          "printed_table": {
+            "size_awg": null
+          },
+          "ampacity": {
+            "size_awg": "18",
+            "bundling_factor": 1
+          },
+          "drop_at_size": {
+            "volts": 0.27,
+            "percent": 2.3
+          }
+        },
+        "protection": {
+          "min_a": 25,
+          "fuse_a": 25,
+          "fits_conductor": true,
+          "conductor_ampacity_a": 180
+        }
+      },
+      "reason_contains": {
+        "conductor.printed_table.reason": "has no size for 20 A at 40 ft",
+        "conductor.voltage_drop.reason": "parallel"
+      },
+      "blanks_count": 1
+    },
+    {
+      "name": "insulation rating not a column: blank with an ask",
+      "inputs": {
+        "insulation_rating_c": 90
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": null,
+          "governed_by": null,
+          "voltage_drop": {
+            "size_awg": "12"
+          },
+          "ampacity": {
+            "size_awg": null
+          }
+        },
+        "protection": {
+          "fuse_a": null
+        }
+      },
+      "blanks": [
+        {
+          "field": "conductor.ampacity.size_awg",
+          "reason_contains": "no 90 °C column",
+          "ask_field": "own.ampacity_a"
+        }
+      ]
+    },
+    {
+      "name": "insulation rating not a column: the person's own ampacity fills the blank",
+      "inputs": {
+        "insulation_rating_c": 90
+      },
+      "own": {
+        "ampacity_a": 40
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "governed_by": "voltage_drop",
+          "ampacity": {
+            "size_awg": "12",
+            "ampacity_a": 40,
+            "bundling_factor": 1,
+            "source": {
+              "by": "you"
+            }
+          }
+        },
+        "protection": {
+          "min_a": 12.5,
+          "fuse_a": 15,
+          "fits_conductor": true,
+          "conductor_ampacity_a": 40
+        }
+      },
+      "blanks_count": 1
+    },
+    {
+      "name": "bundle count not covered: blank with an ask",
+      "inputs": {
+        "bundled_conductors": 30
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": null,
+          "ampacity": {
+            "size_awg": null,
+            "bundling_factor": null
+          }
+        }
+      },
+      "blanks": [
+        {
+          "field": "conductor.ampacity.size_awg",
+          "reason_contains": "no row for 30 conductors",
+          "ask_field": "own.bundling_factor"
+        }
+      ]
+    },
+    {
+      "name": "bundle count not covered: the person's own factor derates the table",
+      "inputs": {
+        "bundled_conductors": 30
+      },
+      "own": {
+        "bundling_factor": 0.2
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "governed_by": "voltage_drop",
+          "ampacity": {
+            "size_awg": "12",
+            "ampacity_a": 60,
+            "bundling_factor": 0.2
+          }
+        },
+        "protection": {
+          "min_a": 12.5,
+          "fuse_a": null,
+          "fits_conductor": false,
+          "conductor_ampacity_a": 12
+        }
+      },
+      "blanks": [
+        {
+          "field": "protection.fuse_a",
+          "reason_contains": "largest size this conductor allows is 10 A"
+        }
+      ],
+      "blanks_count": 2,
+      "present": {
+        "rows": {
+          "ampacity_size": {
+            "note_contains": "bundling factor 0.2 (factor entered by you)"
+          }
+        }
+      }
+    },
+    {
+      "name": "engine space uses the inside table and its reminder",
+      "inputs": {
+        "engine_space": true
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "governed_by": "voltage_drop",
+          "ampacity": {
+            "size_awg": "18",
+            "ampacity_a": 15,
+            "source": {
+              "table": "ampacity_inside_engine_space",
+              "page": 2
+            }
+          }
+        },
+        "protection": {
+          "fuse_a": 15,
+          "conductor_ampacity_a": 50
+        }
+      },
+      "reminders_count": 2
+    },
+    {
+      "name": "length in feet",
+      "inputs": {
+        "length": 10,
+        "length_unit": "ft"
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "14",
+          "size_mm2": 2.03,
+          "metric_standard_mm2": 2.5,
+          "voltage_drop": {
+            "cm_required": 2777.8,
+            "size_awg": "14"
+          },
+          "drop_at_size": {
+            "volts": 0.5,
+            "percent": 2.1
+          }
+        },
+        "protection": {
+          "fuse_a": 15,
+          "conductor_ampacity_a": 40
+        }
+      }
+    },
+    {
+      "name": "a 5 % limit: formula only, no printed table",
+      "inputs": {
+        "max_drop_percent": 5
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "14",
+          "voltage_drop": {
+            "cm_required": 2734.0,
+            "size_awg": "14"
+          },
+          "printed_table": {
+            "size_awg": null
+          },
+          "drop_at_size": {
+            "volts": 0.82,
+            "percent": 3.4
+          }
+        }
+      },
+      "reason_contains": {
+        "conductor.printed_table.reason": "No printed table for a 5 % limit"
+      }
+    },
+    {
+      "name": "the person's own short-circuit current answers the interrupting blank",
+      "inputs": {},
+      "own": {
+        "short_circuit_a": 1500
+      },
+      "expect": {
+        "protection": {
+          "interrupting": {
+            "required_a": 1500,
+            "classes": [
+              {
+                "class": "Class Y",
+                "interrupting_rating_a": 2000,
+                "suits_load": true
+              },
+              {
+                "class": "Class X",
+                "interrupting_rating_a": 20000,
+                "suits_load": false
+              }
+            ]
+          }
+        }
+      },
+      "blanks_count": 0
+    },
+    {
+      "name": "constants table missing: blank with an ask for K",
+      "inputs": {},
+      "omit": [
+        "constants"
+      ],
+      "expect": {
+        "conductor": {
+          "size_awg": null,
+          "voltage_drop": {
+            "cm_required": null,
+            "size_awg": null
+          },
+          "ampacity": {
+            "size_awg": "18"
+          }
+        }
+      },
+      "blanks": [
+        {
+          "field": "conductor.voltage_drop.cm_required",
+          "reason_contains": "constants table",
+          "ask_field": "own.k"
+        }
+      ]
+    },
+    {
+      "name": "constants table missing: the person's own K, round trip assumed and said",
+      "inputs": {},
+      "omit": [
+        "constants"
+      ],
+      "own": {
+        "k": 10
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "voltage_drop": {
+            "cm_required": 4556.7,
+            "size_awg": "12"
+          }
+        }
+      },
+      "steps_contain": [
+        "L taken as the round trip"
+      ]
+    },
+    {
+      "name": "loop length: the whole run typed once is halved to one way",
+      "inputs": {
+        "length": 10,
+        "length_basis": "loop"
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "voltage_drop": {
+            "cm_required": 4556.7,
+            "size_awg": "12"
+          }
+        },
+        "fittings": {
+          "quantities": {
+            "cables": 1,
+            "cable_length": 10,
+            "length_unit": "m"
+          }
+        }
+      },
+      "steps_contain": [
+        "10 m there and back, 5 m each way"
+      ]
+    },
+    {
+      "name": "circuit type adds its reminder tag and its load profile is used",
+      "inputs": {
+        "circuit_type": "inverter",
+        "load_type": "inverter"
+      },
+      "expect": {
+        "reminders": [
+          {
+            "clause": "F.1"
+          },
+          {
+            "clause": "F.4"
+          }
+        ]
+      },
+      "reminders_count": 2
+    },
+    {
+      "name": "fittings from the catalog tables: diameter, tubing over the lug barrel, lug and die",
+      "inputs": {},
+      "expect": {
+        "fittings": {
+          "cable_od": {
+            "value": 4,
+            "unit": "mm",
+            "mm": 4,
+            "source": {
+              "table": "cable_dimensions",
+              "page": 1
+            }
+          },
+          "heat_shrink": {
+            "size": "S12",
+            "supplied_id": 12,
+            "recovered_id": 4,
+            "unit": "mm",
+            "adhesive": true,
+            "source": {
+              "table": "heat_shrink",
+              "page": 2
+            }
+          },
+          "lug": {
+            "part": "L12-516",
+            "stud": "5/16",
+            "crimp_die": "D12",
+            "source": {
+              "table": "lugs",
+              "page": 2
+            }
+          },
+          "quantities": {
+            "cables": 1,
+            "lugs": 2,
+            "heat_shrink_pieces": 2,
+            "cable_length": 10,
+            "length_unit": "m"
+          }
+        }
+      },
+      "blanks_count": 1,
+      "steps_contain": [
+        "heat shrink S12",
+        "lug L12-516, die D12"
+      ]
+    },
+    {
+      "name": "fittings for a paralleled set: counts follow the parallel count",
+      "inputs": {
+        "current": 100,
+        "length": 2,
+        "max_drop_percent": 10,
+        "load_type": "battery_main",
+        "short_circuit_a": 5000
+      },
+      "expect": {
+        "conductor": {
+          "size_awg": "12",
+          "parallel": 2
+        },
+        "fittings": {
+          "quantities": {
+            "cables": 2,
+            "lugs": 4,
+            "heat_shrink_pieces": 4,
+            "cable_length": 8,
+            "length_unit": "m"
+          }
+        }
+      },
+      "present": {
+        "unit": "mm2",
+        "rows": {
+          "size_awg": {
+            "value": "2 × 6 mm² in parallel (2 × 12 AWG)"
+          },
+          "size_mm2": {
+            "label": "Exact area of that AWG size",
+            "note_contains": "4.05 mm² each"
+          },
+          "bom_cable": {
+            "group": "Bill of materials",
+            "note_contains": "there and back per cable"
+          }
+        }
+      }
+    },
+    {
+      "name": "adhesive-lined tubing is preferred among equal sizes when no lug barrel is known",
+      "inputs": {
+        "stud_size": "M8"
+      },
+      "expect": {
+        "fittings": {
+          "heat_shrink": {
+            "size": "S6",
+            "adhesive": true
+          },
+          "lug": {
+            "part": "L12-M8",
+            "crimp_die": null
+          }
+        }
+      },
+      "blanks": [
+        {
+          "field": "fittings.lug.crimp_die",
+          "reason_contains": "no crimp die",
+          "ask_field": "own.crimp_die"
+        }
+      ]
+    },
+    {
+      "name": "stud not listed for the size: a blank asks for the lug part",
+      "inputs": {
+        "stud_size": "M10"
+      },
+      "expect": {
+        "fittings": {
+          "lug": {
+            "part": null
+          },
+          "heat_shrink": {
+            "size": "S6"
+          }
+        }
+      },
+      "blanks": [
+        {
+          "field": "fittings.lug.part",
+          "reason_contains": "not M10",
+          "ask_field": "own.lug_part"
+        }
+      ]
+    },
+    {
+      "name": "no stud given: a blank asks for it",
+      "inputs": {
+        "stud_size": null
+      },
+      "blanks": [
+        {
+          "field": "fittings.lug.part",
+          "reason_contains": "No stud size",
+          "ask_field": "own.stud"
+        }
+      ]
+    },
+    {
+      "name": "the person's own lug part and die fill the blanks",
+      "inputs": {
+        "stud_size": "M10"
+      },
+      "own": {
+        "lug_part": "X-M10",
+        "crimp_die": "DX"
+      },
+      "expect": {
+        "fittings": {
+          "lug": {
+            "part": "X-M10",
+            "crimp_die": "DX",
+            "source": {
+              "by": "you"
+            },
+            "die_source": {
+              "by": "you"
+            }
+          }
+        }
+      },
+      "blanks_count": 1
+    },
+    {
+      "name": "catalog tables absent: three blanks with asks, and the size still computed",
+      "inputs": {},
+      "omit": [
+        "cable_dimensions",
+        "heat_shrink",
+        "lugs"
+      ],
+      "expect": {
+        "conductor": {
+          "size_awg": "12"
+        },
+        "fittings": {
+          "cable_od": {
+            "value": null
+          },
+          "heat_shrink": {
+            "size": null
+          },
+          "lug": {
+            "part": null
+          },
+          "quantities": {
+            "cables": 1
+          }
+        }
+      },
+      "blanks": [
+        {
+          "field": "fittings.cable_od",
+          "reason_contains": "No cable dimensions table",
+          "ask_field": "own.cable_od_mm"
+        },
+        {
+          "field": "fittings.heat_shrink.size",
+          "reason_contains": "No heat-shrink table",
+          "ask_field": "own.heat_shrink_size"
+        },
+        {
+          "field": "fittings.lug.part",
+          "reason_contains": "No lugs table",
+          "ask_field": "own.lug_part"
+        }
+      ],
+      "blanks_count": 4
+    },
+    {
+      "name": "the person's own cable diameter, then the tubing from the table",
+      "inputs": {},
+      "omit": [
+        "cable_dimensions"
+      ],
+      "own": {
+        "cable_od_mm": 4
+      },
+      "expect": {
+        "fittings": {
+          "cable_od": {
+            "value": 4,
+            "unit": "mm",
+            "mm": 4,
+            "source": {
+              "by": "you"
+            }
+          },
+          "heat_shrink": {
+            "size": "S12"
+          }
+        }
+      },
+      "blanks_count": 1
+    },
+    {
+      "name": "no tubing fits: a blank names what is listed and asks for the size",
+      "inputs": {},
+      "omit": [
+        "cable_dimensions"
+      ],
+      "own": {
+        "cable_od_mm": 0.5
+      },
+      "blanks": [
+        {
+          "field": "fittings.heat_shrink.size",
+          "reason_contains": "shrinks below",
+          "ask_field": "own.heat_shrink_size"
+        }
+      ]
+    },
+    {
+      "name": "the person's own heat-shrink size fills the blank",
+      "inputs": {},
+      "omit": [
+        "cable_dimensions"
+      ],
+      "own": {
+        "cable_od_mm": 0.5,
+        "heat_shrink_size": "HS-X"
+      },
+      "expect": {
+        "fittings": {
+          "heat_shrink": {
+            "size": "HS-X",
+            "source": {
+              "by": "you"
+            }
+          }
+        }
+      },
+      "blanks_count": 1
+    }
+  ]
+}

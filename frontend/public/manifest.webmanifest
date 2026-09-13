@@ -1,0 +1,16 @@
+{
+  "name": "Marine Electrical Document Intelligence",
+  "short_name": "Marine Docs",
+  "description": "Read, check and fill in values from your marine electrical documentation.",
+  "start_url": "/library",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f9",
+  "theme_color": "#12263f",
+  "icons": [
+    { "src": "/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

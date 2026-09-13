@@ -1,0 +1,8 @@
+# The E-11 library's tests compare rendered text byte-for-byte with files in
+# the repository (tests/cheatsheet-expected.md, the JSON fixtures), so those
+# files must check out with the same line endings on every platform. Without
+# this, a Windows checkout turns them into CRLF and the comparison fails.
+packages/e11-calc/**/*.md   text eol=lf
+packages/e11-calc/**/*.json text eol=lf
+packages/e11-calc/**/*.ts   text eol=lf
+packages/e11-calc/**/*.mjs  text eol=lf

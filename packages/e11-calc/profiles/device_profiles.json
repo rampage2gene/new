@@ -1,0 +1,31 @@
+{
+  "_note": "Industry guidance on how loads behave and what protects them, not ABYC E-11 table values. Verify against the equipment maker's documentation. This file is the contract: the TypeScript copy (src/profiles.ts) and the Python copy (backend/app/calculators/modules.py) are both tested against it. circuit_types map a kind of circuit to its load profile and reminder tags; the same three copies are held equal.",
+  "standard_fuse_sizes_a": [1, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 600, 700, 800],
+  "standard_breaker_sizes_a": [5, 10, 15, 16, 20, 25, 30, 32, 40, 50, 60, 63, 70, 80, 100, 125, 150, 175, 200, 225, 250, 300, 400],
+  "device_profiles": {
+    "inverter": {"label": "Inverter / inverter-charger", "factor": 1.25, "surge_note": "Inverters draw large surge currents on motor/compressor start-up; use a time-delay / high-interrupt fuse (e.g. Class T or MRBF for large banks).", "char": "time-delay, high interrupt capacity (Class T recommended for banks able to deliver >5 kA fault current)"},
+    "battery_main": {"label": "Battery bank main / positive feed", "factor": 1.0, "surge_note": "The main fuse protects the conductor, not the load; it is sized to the cable ampacity.", "char": "high interrupt capacity matched to the bank's prospective short-circuit current (Class T for lithium/large AGM banks; ANL/MEGA only where the AIC is adequate)"},
+    "battery_charger": {"label": "Battery charger output", "factor": 1.25, "surge_note": "Charger output current is limited by the charger; size at 125 % of rated output.", "char": "standard blade/ANL/MRBF per manufacturer"},
+    "alternator": {"label": "Alternator output", "factor": 1.25, "surge_note": "Never open an alternator output circuit while running (load-dump destroys diodes). ABYC requires overcurrent protection within 7\" (178 mm) unless self-limiting; some manufacturers advise against fusing the B+ lead - follow their documentation.", "char": "MRBF/ANL/MEGA sized ≥125 % of rated output, or per manufacturer"},
+    "dc_dc": {"label": "DC-DC charger / converter", "factor": 1.25, "surge_note": "Protect both input and output leads; input current exceeds output current when stepping voltage up.", "char": "per manufacturer, typically blade/MIDI"},
+    "solar": {"label": "Solar controller (PV or battery side)", "factor": 1.25, "surge_note": "PV side: 1.25 × Isc × 1.25 (irradiance); battery side: 1.25 × controller rated output.", "char": "DC-rated fuse or breaker"},
+    "motor": {"label": "Motor (windlass, thruster, pump)", "factor": 1.5, "surge_note": "Locked-rotor / inrush current is 3–6× running current; use a slow-blow fuse or thermal breaker per the motor manufacturer's rating. Windlass/thruster breakers are usually specified by the manufacturer.", "char": "slow-blow / thermal breaker; manufacturer's rating takes precedence"},
+    "capacitive": {"label": "Capacitive / electronic load", "factor": 1.25, "surge_note": "Input capacitors cause a brief inrush; use time-delay characteristics.", "char": "time-delay"},
+    "resistive": {"label": "Resistive load (heater, lights)", "factor": 1.25, "surge_note": "No significant inrush.", "char": "fast-acting or standard"},
+    "electronics": {"label": "Electronics / instruments", "factor": 1.25, "surge_note": "Follow the equipment manufacturer's fuse rating; small fuses protect the wire.", "char": "fast-acting (blade/glass) per manufacturer"}
+  },
+  "circuit_types": {
+    "battery_main": {"label": "Battery to main switch or panel feed", "load_type": "battery_main", "tags": ["battery_main"]},
+    "inverter": {"label": "Inverter or inverter-charger", "load_type": "inverter", "tags": ["inverter"]},
+    "charger": {"label": "Battery charger output", "load_type": "battery_charger", "tags": ["charger"]},
+    "alternator": {"label": "Alternator output", "load_type": "alternator", "tags": ["alternator"]},
+    "dc_dc": {"label": "DC-DC converter", "load_type": "dc_dc", "tags": ["dc_dc"]},
+    "solar": {"label": "Solar controller", "load_type": "solar", "tags": ["solar"]},
+    "windlass": {"label": "Windlass, thruster, winch", "load_type": "motor", "tags": ["windlass", "motor"]},
+    "starter": {"label": "Engine starter", "load_type": "motor", "tags": ["starter", "motor"]},
+    "bilge_pump": {"label": "Bilge pump", "load_type": "motor", "tags": ["bilge_pump", "motor"]},
+    "lights": {"label": "Navigation and other lights", "load_type": "resistive", "tags": ["lights"]},
+    "electronics": {"label": "Electronics, instruments", "load_type": "electronics", "tags": ["electronics"]},
+    "general_dc": {"label": "Other DC load", "load_type": "resistive", "tags": []}
+  }
+}

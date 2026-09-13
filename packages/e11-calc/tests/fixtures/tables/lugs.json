@@ -1,0 +1,52 @@
+{
+  "id": "lugs",
+  "title": "SYNTHETIC FIXTURE - lugs and crimp dies",
+  "kind": "lugs",
+  "status": "fixture",
+  "source": {
+    "document": "SYNTHETIC TEST FIXTURE - not a lug catalog"
+  },
+  "diameter_unit": "mm",
+  "rows": [
+    {
+      "size_awg": "18",
+      "stud": "5/16",
+      "part": "L18-516",
+      "barrel_od": 3.0,
+      "crimp_die": "D18",
+      "page": 1
+    },
+    {
+      "size_awg": "16",
+      "stud": "5/16",
+      "part": "L16-516",
+      "barrel_od": 4.0,
+      "crimp_die": "D16",
+      "page": 1
+    },
+    {
+      "size_awg": "14",
+      "stud": "5/16",
+      "part": "L14-516",
+      "barrel_od": 5.0,
+      "crimp_die": "D14",
+      "page": 1
+    },
+    {
+      "size_awg": "12",
+      "stud": "5/16",
+      "part": "L12-516",
+      "barrel_od": 7.0,
+      "crimp_die": "D12",
+      "page": 2
+    },
+    {
+      "size_awg": "12",
+      "stud": "M8",
+      "part": "L12-M8",
+      "barrel_od": null,
+      "crimp_die": null,
+      "page": 2
+    }
+  ]
+}

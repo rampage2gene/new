@@ -1,0 +1,12 @@
+{
+  "id": "bundling_factors",
+  "title": "SYNTHETIC FIXTURE - bundling correction factors",
+  "kind": "bundling",
+  "status": "fixture",
+  "source": { "document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "page": 3 },
+  "rows": [
+    { "min_conductors": 1, "max_conductors": 2, "factor": 1.0, "page": 3 },
+    { "min_conductors": 3, "max_conductors": 6, "factor": 0.5, "page": 3 },
+    { "min_conductors": 7, "max_conductors": 24, "factor": 0.25, "page": 3 }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "ampacity_inside_engine_space",
+  "title": "SYNTHETIC FIXTURE - allowable current inside engine spaces",
+  "kind": "ampacity",
+  "status": "fixture",
+  "source": { "document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "page": 2 },
+  "columns": { "105": "A" },
+  "rows": [
+    { "size_awg": "18", "values": { "105": 15 }, "page": 2 },
+    { "size_awg": "16", "values": { "105": 25 }, "page": 2 },
+    { "size_awg": "14", "values": { "105": 35 }, "page": 2 },
+    { "size_awg": "12", "values": { "105": 50 }, "page": 2 }
+  ]
+}

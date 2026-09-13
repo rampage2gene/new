@@ -1,0 +1,13 @@
+{
+  "id": "circular_mils",
+  "title": "SYNTHETIC FIXTURE - conductor areas",
+  "kind": "circular_mils",
+  "status": "fixture",
+  "source": { "document": "SYNTHETIC TEST FIXTURE - not ABYC E-11", "page": 1 },
+  "rows": [
+    { "size_awg": "18", "circular_mils": 1000, "page": 1 },
+    { "size_awg": "16", "circular_mils": 2000, "page": 1 },
+    { "size_awg": "14", "circular_mils": 4000, "page": 1 },
+    { "size_awg": "12", "circular_mils": 8000, "page": 1 }
+  ]
+}

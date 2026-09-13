@@ -1,0 +1,40 @@
+{
+  "id": "heat_shrink",
+  "title": "SYNTHETIC FIXTURE - heat-shrink tubing",
+  "kind": "heat_shrink",
+  "status": "fixture",
+  "source": {
+    "document": "SYNTHETIC TEST FIXTURE - not a tubing catalog"
+  },
+  "diameter_unit": "mm",
+  "rows": [
+    {
+      "size": "S3",
+      "supplied_id": 3.0,
+      "recovered_id": 1.0,
+      "adhesive": false,
+      "page": 1
+    },
+    {
+      "size": "S6",
+      "supplied_id": 6.0,
+      "recovered_id": 2.0,
+      "adhesive": true,
+      "page": 1
+    },
+    {
+      "size": "S6P",
+      "supplied_id": 6.0,
+      "recovered_id": 2.0,
+      "adhesive": false,
+      "page": 1
+    },
+    {
+      "size": "S12",
+      "supplied_id": 12.0,
+      "recovered_id": 4.0,
+      "adhesive": true,
+      "page": 2
+    }
+  ]
+}
