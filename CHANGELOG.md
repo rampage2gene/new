@@ -1,5 +1,37 @@
 # Changelog
 
+*What the app can already do is listed in [docs/SPEC.md §1.1](docs/SPEC.md);
+this file is only what changed and when.*
+
+## v0.3.0 - 2026-09-13
+
+The calculator answers with the cable size and keeps the working out of the
+way until you ask for it, and what you pick from now comes from your own
+pages instead of a list written into the app.
+
+- Changed: **the answer stands alone.** The result opens with *Cable size* -
+  the size to use, or the set of cables in parallel when one will not do -
+  and the working, the fuse, the fittings and what to buy wait behind one
+  line. That line says how many of the rows behind it are still waiting on
+  you, so nothing is hidden that you need to answer. A new answer folds them
+  again.
+- Changed: **every condition is offered from your own tables.** The
+  insulation rating is now a list of the temperature columns your ampacity
+  pages actually print, instead of a number to type and get wrong. Each
+  voltage-drop limit says which printed table stands behind it, and at what
+  voltage. Inside or outside an engine space says when the table that answer
+  needs is not confirmed yet, rather than answering from nothing. A condition
+  with no confirmed page behind it is still typed, and still asks for the
+  factor - nothing is assumed.
+- Changed: the words of the answer - the headings, the row names, the
+  sentence that says what decided the size, and the choices each question
+  offers - moved to sit beside the arithmetic they describe, so this app and
+  anything else built on the same engine read identically. The shared tests
+  now fail if either one is changed on its own.
+- Added: a *Look before you build* map in the project notes and a
+  *What the app already does* list in the specification, so work that already
+  exists is found instead of written a second time.
+
 ## v0.2.2 - 2026-09-12
 
 The circuit calculator answers with the cable size first, and getting your

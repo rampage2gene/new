@@ -264,7 +264,7 @@ Every upload is logged by the `app.api.documents` logger, so an upload failure t
 
 | Method & path | Request | Response |
 |---|---|---|
-| `GET /calculators` | — | `[CalculatorSpec]`. The circuit calculator's `bundle` choices are built when this is read, from the owner's confirmed bundling table, so a table confirmed a moment ago is offered here at once |
+| `GET /calculators` | — | `[CalculatorSpec]`. The circuit calculator's conditions are built when this is read, from the owner's confirmed tables, so a table confirmed a moment ago is offered here at once: `bundle` (one option per row of the bundling table, with its factor and page), `insulation_rating_c` (a select of the temperature columns the ampacity tables print, a typed number while none is confirmed), `max_drop_percent` (each limit says which printed grid is behind it and at what voltage) and `engine_space` (an answer whose table is not confirmed says so) |
 | `POST /calculators/{calc_id}/run` | `{"inputs": {key: value \| {"value", "unit", "source": SourceRef}}}` | `CalcResult`; 422 with the validation message (missing required input, non-numeric, unknown conductor size, unknown calculator) |
 | `GET /calculators/{calc_id}/suggest` | `document_id` | `{"calculator": id, "document": {id, name}, "suggestions": {input_key: [Entity ≤6]}}` (only inputs with `entity_types`) |
 | `POST /calculators/{calc_id}/export` | same body as `run` | attachment `<calc_id>.xlsx`: the calculator as a sheet whose inputs are editable cells and whose results are Excel formulas (plus a `Reference` sheet of lookup tables); 422 when the app cannot run the calculation with the given inputs. `circuit_e11` has no formulas: its sheet holds the app-computed values |

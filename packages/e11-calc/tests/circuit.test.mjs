@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { sizeCircuit } from "../dist/index.js";
+import { conditionOptions, presentCircuit, sizeCircuit } from "../dist/index.js";
 import { HERE, assertSubset, fixtureSheet, fixtureTables, getPath } from "./helpers.mjs";
 
 const vectors = JSON.parse(readFileSync(join(HERE, "test-vectors.json"), "utf8"));
@@ -26,6 +26,27 @@ for (const c of vectors.cases) {
       assert.ok(typeof v === "string" && v.includes(text), `${path} = ${JSON.stringify(v)} lacks "${text}"`);
     }
     for (const text of c.steps_contain || []) assert.ok(result.steps.some((s) => s.includes(text)), `no step contains "${text}": ${JSON.stringify(result.steps)}`);
+    // The words a person reads come from the same two engines as the numbers,
+    // so a label or a sentence changed in one and not the other fails here.
+    if (c.present) {
+      const view = presentCircuit(inputs, result, { unit: c.present.unit || "awg", own: c.own || {} });
+      for (const [key, want] of Object.entries(c.present.rows || {})) {
+        const row = view.rows.find((r) => r.key === key);
+        assert.ok(row, `no presented row "${key}"; rows: ${view.rows.map((r) => r.key).join(", ")}`);
+        for (const [field, value] of Object.entries(want)) {
+          if (field === "note_contains") assert.ok(typeof row.note === "string" && row.note.includes(value), `${key} note ${JSON.stringify(row.note)} lacks "${value}"`);
+          else assert.deepEqual(row[field], value, `${key}.${field}`);
+        }
+      }
+      if (c.present.groups) assert.deepEqual([...new Set(view.rows.map((r) => r.group))], c.present.groups);
+      if (c.present.condition_options) {
+        const offered = conditionOptions(tables);
+        for (const [key, labels] of Object.entries(c.present.condition_options)) {
+          assert.ok(offered[key], `no options generated for "${key}"`);
+          assert.deepEqual(offered[key].map((o) => o.label), labels, `options for ${key}`);
+        }
+      }
+    }
     // Every blank names its field, and every ask its own.* field.
     for (const b of result.blanks) {
       assert.ok(b.field && b.reason, JSON.stringify(b));

@@ -77,6 +77,27 @@ def test_vector(case):
         assert isinstance(v, str) and text in v, f"{path} = {v!r}"
     for text in case.get("steps_contain", []):
         assert any(text in s for s in result["steps"]), result["steps"]
+    # The words a person reads come from the same two engines as the numbers,
+    # so a label or a sentence changed in one and not the other fails here.
+    if "present" in case:
+        from app.reference.e11_present import condition_options, present_circuit
+
+        want = case["present"]
+        view = present_circuit(inputs, result, want.get("unit", "awg"), case.get("own") or {})
+        for key, fields in (want.get("rows") or {}).items():
+            row = next((r for r in view["rows"] if r["key"] == key), None)
+            assert row, f"no presented row {key!r}; rows: {[r['key'] for r in view['rows']]}"
+            for field, value in fields.items():
+                if field == "note_contains":
+                    assert isinstance(row["note"], str) and value in row["note"], f"{key} note {row['note']!r} lacks {value!r}"
+                else:
+                    assert row[field] == value, f"{key}.{field}: {row[field]!r}"
+        if "groups" in want:
+            assert list(dict.fromkeys(r["group"] for r in view["rows"])) == want["groups"]
+        for key, labels in (want.get("condition_options") or {}).items():
+            offered = condition_options(tables).get(key)
+            assert offered, f"no options generated for {key!r}"
+            assert [o["label"] for o in offered] == labels, f"options for {key}"
     for b in result["blanks"]:
         assert b["field"] and b["reason"]
         if "ask" in b:

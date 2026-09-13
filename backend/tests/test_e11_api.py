@@ -65,6 +65,37 @@ def test_the_bundle_is_picked_from_the_confirmed_table(client):
         client.delete("/api/reference/e11/tables/bundling_factors")
 
 
+def test_every_condition_is_offered_from_the_tables(client):
+    """A person picks from what their own pages print - the temperature
+    columns the ampacity table carries, which drop limits have a printed grid
+    behind them - and never from a list written into the code."""
+    def field(key):
+        spec = next(s for s in client.get("/api/calculators").json() if s["id"] == "circuit_e11")
+        return next(i for i in spec["inputs"] if i["key"] == key)
+
+    rating = field("insulation_rating_c")
+    assert rating["kind"] == "select"  # a typed number until the pages say which columns exist
+    assert [o["value"] for o in rating["options"]] == ["60", "105"]
+    assert rating["options"][1]["label"] == "105 °C (page 2, test data)"
+    assert rating["default"] == "105"
+
+    drop = field("max_drop_percent")
+    assert [o["value"] for o in drop["options"]] == ["3", "10", "other"]
+    # The formula honours any limit; the label says which one has a page behind it.
+    assert drop["options"][0]["label"] == "3 % (critical circuits) — printed table at 12 V (page 4, test data)"
+    assert drop["options"][2]["label"] == "other"
+
+    assert [o["label"] for o in field("engine_space")["options"]] == ["No", "Yes"]
+    # Drop the inside-engine-space table and the choice says so rather than vanishing.
+    draft = {**_fixture("ampacity_inside_engine_space"), "status": "draft"}
+    client.put("/api/reference/e11/tables/ampacity_inside_engine_space", json=draft)
+    try:
+        assert [o["label"] for o in field("engine_space")["options"]] == ["No", "Yes — that table is not confirmed yet"]
+        assert [o["value"] for o in field("insulation_rating_c")["options"]] == ["60", "105"]
+    finally:
+        client.delete("/api/reference/e11/tables/ampacity_inside_engine_space")
+
+
 def test_sizes_can_be_shown_in_mm2(client):
     r = _run(client, size_unit="mm2")
     by = {x["key"]: x for x in r["results"]}

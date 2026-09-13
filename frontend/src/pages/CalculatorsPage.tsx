@@ -131,8 +131,13 @@ export default function CalculatorsPage() {
     setForm((f) => ({ ...f, [inp.key]: { value, unit: e.unit, origin: "document", source: { document_id: e.document_id, document_name: e.document_name || undefined, page: e.page, section: e.section, entity_id: e.id, snippet: e.snippet, confidence: e.confidence } } }));
   };
 
-  const run = async (f: FormState = form) => {
+  const run = async (f: FormState = form, keepWorking = false) => {
     if (!spec) return;
+    // A fresh calculation folds the working away again, because the size is
+    // the answer. Answering a blank does not: the box being answered usually
+    // sits behind that very fold, and closing it after every value would make
+    // filling in three blanks three trips.
+    if (!keepWorking) setShowWorking(false);
     setBusy(true);
     setError(null);
     try {
@@ -153,7 +158,7 @@ export default function CalculatorsPage() {
     if (!ask.input_key || !v) return;
     const next: FormState = { ...form, [ask.input_key]: { value: v, unit: ask.unit, origin: "user" } };
     setForm(next);
-    run(next);
+    run(next, true);
   };
 
   /** Inputs that only make sense once something else was chosen, or once a
@@ -176,6 +181,57 @@ export default function CalculatorsPage() {
     }
     return order.map((g) => ({ name: g, items: by.get(g)! }));
   }, [result]);
+
+  // The answer is the point of this screen: the size stays open and the
+  // working, the protection, the fittings and what to buy wait behind one
+  // line. A new answer folds them again; the line says how many of the
+  // hidden rows are still waiting on the person, so nothing is lost in there.
+  const [showWorking, setShowWorking] = useState(false);
+  useEffect(() => { setShowWorking(false); }, [calcId]);
+  const foldable = groups.length > 1 && Boolean(groups[0].name);
+  const shownGroups = foldable ? groups.slice(0, 1) : groups;
+  const foldedGroups = foldable ? groups.slice(1) : [];
+  const needsYou = foldedGroups.reduce((n, g) => n + g.items.filter((r) => r.value == null).length, 0);
+
+  /** One group of result rows. Pulled out of the markup because the answer
+   *  is shown on its own and the rest only when it is asked for. */
+  const renderGroup = (g: { name: string; items: CalcResult["results"] }) => (
+              <div key={g.name}>
+                {g.name && <h4 style={{ marginTop: 10 }}>{g.name}</h4>}
+                {g.items.map((r) => {
+                  const ask = result?.asks?.find((a) => a.field === ASK_FOR_ROW[r.key] || (r.key === "size_awg" && a.field === "reference"));
+                  // A short answer in words - "6 AWG", "4 x 12 AWG in
+                  // parallel" - is the value of the row just as much as a
+                  // number is, and reads as the answer only if it is set like
+                  // one. A long one stays in the line of text.
+                  const isValue = typeof r.value === "number" || String(r.value).length <= 24;
+                  return (
+                    <div key={r.key} style={{ marginBottom: 10 }}>
+                      <div className={`classification ${r.classification}`}>{r.classification.replace(/_/g, " ")}</div>
+                      {r.value == null ? (
+                        // A blank is a request, never an empty cell: what is missing, and the box that answers it.
+                        <div>
+                          <span className="muted">—</span> <span className="muted">{r.label}</span>
+                          {r.note && <div className="small">{r.note}</div>}
+                          {ask?.input_key && (
+                            <div className="row" style={{ flexWrap: "nowrap", marginTop: 4 }}>
+                              <input type={ask.kind === "text" ? "text" : "number"} step="any" value={answers[ask.field] ?? ""} placeholder={ask.unit ? `value in ${ask.unit}` : ask.kind === "text" ? "catalog name" : "value from the page"} aria-label={ask.prompt} onChange={(e) => setAnswers((a) => ({ ...a, [ask.field]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); answer(ask); } }} style={{ width: 150 }} />
+                              <button className="btn primary" disabled={busy || !answers[ask.field]?.trim()} onClick={() => answer(ask)}>Use this value</button>
+                            </div>
+                          )}
+                          {ask && !ask.input_key && <div className="small" style={{ marginTop: 4 }}><Link to={`/calculators/${REFERENCE_ID}`}>Open the ABYC E-11 reference</Link></div>}
+                          {ask?.input_key && ask.field.startsWith("fittings.") && ask.field !== "fittings.lug.part" && <div className="small muted" style={{ marginTop: 4 }}>Or type the whole table once under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
+                          {ask?.input_key === "own_lug_part" && <div className="small muted" style={{ marginTop: 4 }}>Or add the row to your lugs table under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
+                        </div>
+                      ) : (
+                        <div><span className={isValue ? "result-value" : ""}>{typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span> {r.unit && <b>{r.unit}</b>} <span className="muted">{isValue ? r.label : `— ${r.label}`}</span></div>
+                      )}
+                      {r.value != null && r.note && <div className="small muted">{r.note}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+  );
 
   const isReference = calcId === REFERENCE_ID;
 
@@ -263,43 +319,16 @@ export default function CalculatorsPage() {
               <button className="btn sm" onClick={addToReport} title="Collect this result; download all collected results as one PDF report">+ Add to report</button>
             </div>
             <div className="mono small muted" style={{ marginBottom: 8 }}>{result.formula}</div>
-            {groups.map((g) => (
-              <div key={g.name}>
-                {g.name && <h4 style={{ marginTop: 10 }}>{g.name}</h4>}
-                {g.items.map((r) => {
-                  const ask = result.asks?.find((a) => a.field === ASK_FOR_ROW[r.key] || (r.key === "size_awg" && a.field === "reference"));
-                  // A short answer in words - "6 AWG", "4 x 12 AWG in
-                  // parallel" - is the value of the row just as much as a
-                  // number is, and reads as the answer only if it is set like
-                  // one. A long one stays in the line of text.
-                  const isValue = typeof r.value === "number" || String(r.value).length <= 24;
-                  return (
-                    <div key={r.key} style={{ marginBottom: 10 }}>
-                      <div className={`classification ${r.classification}`}>{r.classification.replace(/_/g, " ")}</div>
-                      {r.value == null ? (
-                        // A blank is a request, never an empty cell: what is missing, and the box that answers it.
-                        <div>
-                          <span className="muted">—</span> <span className="muted">{r.label}</span>
-                          {r.note && <div className="small">{r.note}</div>}
-                          {ask?.input_key && (
-                            <div className="row" style={{ flexWrap: "nowrap", marginTop: 4 }}>
-                              <input type={ask.kind === "text" ? "text" : "number"} step="any" value={answers[ask.field] ?? ""} placeholder={ask.unit ? `value in ${ask.unit}` : ask.kind === "text" ? "catalog name" : "value from the page"} aria-label={ask.prompt} onChange={(e) => setAnswers((a) => ({ ...a, [ask.field]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); answer(ask); } }} style={{ width: 150 }} />
-                              <button className="btn primary" disabled={busy || !answers[ask.field]?.trim()} onClick={() => answer(ask)}>Use this value</button>
-                            </div>
-                          )}
-                          {ask && !ask.input_key && <div className="small" style={{ marginTop: 4 }}><Link to={`/calculators/${REFERENCE_ID}`}>Open the ABYC E-11 reference</Link></div>}
-                          {ask?.input_key && ask.field.startsWith("fittings.") && ask.field !== "fittings.lug.part" && <div className="small muted" style={{ marginTop: 4 }}>Or type the whole table once under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
-                          {ask?.input_key === "own_lug_part" && <div className="small muted" style={{ marginTop: 4 }}>Or add the row to your lugs table under <Link to={`/calculators/${REFERENCE_ID}`}>ABYC E-11 reference</Link>, so the next circuit finds it.</div>}
-                        </div>
-                      ) : (
-                        <div><span className={isValue ? "result-value" : ""}>{typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(r.value)}</span> {r.unit && <b>{r.unit}</b>} <span className="muted">{isValue ? r.label : `— ${r.label}`}</span></div>
-                      )}
-                      {r.value != null && r.note && <div className="small muted">{r.note}</div>}
-                    </div>
-                  );
-                })}
+            {shownGroups.map(renderGroup)}
+            {foldedGroups.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <button className="btn sm" aria-expanded={showWorking} onClick={() => setShowWorking((v) => !v)}>
+                  {showWorking ? "Hide" : "Show"} {foldedGroups.map((g) => g.name.toLowerCase()).join(", ")}
+                  {!showWorking && needsYou > 0 && ` (${needsYou} need${needsYou === 1 ? "s" : ""} you)`}
+                </button>
               </div>
-            ))}
+            )}
+            {showWorking && foldedGroups.map(renderGroup)}
             {(result.reminders?.length ?? 0) > 0 && (
               <>
                 <h4 style={{ marginTop: 10 }}>Reminders from the standard</h4>

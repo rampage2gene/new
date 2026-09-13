@@ -22,3 +22,4 @@ export * from "./profiles.js";
 export { loadCheatSheet, remindersFor, renderMarkdown, renderHtml, CheatSheetError } from "./cheatsheet.js";
 export * from "./fittings.js";
 export { sizeCircuit } from "./circuit.js";
+export * from "./present.js";

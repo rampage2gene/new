@@ -21,6 +21,31 @@ a case the tables do not cover is a blank with an ask, never an extrapolation.
 Unit conversions and industry lists (fuse sizes, metric sizes, load profiles)
 are labelled as such.
 
+## Look before you build
+
+Most of what gets asked for is already here. Find the existing piece and call
+it; a second copy of something is a defect, not progress. Where it lives:
+
+| Looking for | It is here |
+| --- | --- |
+| The sizing arithmetic (drop, ampacity, parallel cables) | `packages/e11-calc/src/sizing.ts` and its twin `backend/app/reference/e11_sizing.py` |
+| The whole circuit answer end to end | `circuit.ts` / `e11_circuit.py` |
+| Fuses, interrupting capacity, fittings | `protection.ts`, `fittings.ts` and their twins |
+| The words: labels, groups, "how it was decided" | `present.ts` / `e11_present.py` — **not** the calculator, **not** the UI |
+| What holds the two engines equal | `packages/e11-calc/tests/test-vectors.json` |
+| The tables, their kinds and what makes one usable | `loader.ts` / `e11_tables.py`; the shapes in `packages/e11-calc/schema` |
+| Copying tables out of a document, and confirming them | `backend/app/api/reference.py` |
+| Load types and circuit types | `packages/e11-calc/profiles/device_profiles.json`, held equal by a test |
+| Every endpoint | `docs/API.md`; what the app already does, `docs/SPEC.md` §1 |
+| Screens, states, tokens, voice | `docs/UI.md`, `frontend/src/styles.css` |
+
+**One source per idea.** An arithmetic rule lives in the two engines and is
+held by the vectors. A sentence the person reads lives in the presentation
+twins, so the app and anything else built on the library say the same thing.
+A table value lives in the owner's confirmed set and is exported, never
+copied into a second place. If something has to exist twice, a test must
+fail when the two disagree.
+
 ## The rule the product rests on
 
 **A value the machine is unsure of is left blank, never guessed**, and a
@@ -32,7 +57,7 @@ this — not for speed, not for a tidier screen, not for a shorter flow.
 
 ## Working here
 
-- **Tests:** `cd backend && python -m pytest` (181 tests, one skipped until
+- **Tests:** `cd backend && python -m pytest` (182 tests, one skipped until
   the owner's tables exist) and `cd packages/e11-calc && npm test` (58). They
   must pass before a commit.
 - **UI build:** `cd frontend && npm run build`.
